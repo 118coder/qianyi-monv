@@ -526,7 +526,7 @@
     "revive_on_floor_change": true,
     "revive_ratio": 0.5,
     "start_friends": 2,
-    "stuck_teleport_after": 6.0,
+    "stuck_teleport_after": 2.5,
     "think_interval": 0.15,
     "xp_share_ratio": 1.0
   },

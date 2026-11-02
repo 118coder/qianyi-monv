@@ -168,7 +168,7 @@ func _physics_process(delta: float) -> void:
 			try_skill(ai_attack_pos)
 	knock = knock.move_toward(Vector2.ZERO, 1000.0 * delta)
 	lunge = lunge.move_toward(Vector2.ZERO, 1500.0 * delta)
-	velocity = dir * spd + knock + lunge
+	velocity = dir * spd + knock + lunge + _separation() * spd * 0.65
 	move_and_slide()
 	_moving = dir.length_squared() > 0.001
 	_animate(delta)
@@ -194,6 +194,25 @@ func _ai_dir(_delta: float) -> Vector2:
 		facing_name = _dir_name(g)
 		return g.normalized()
 	return Vector2.ZERO
+
+
+## 软分离：队友之间、与玩家之间保持个人空间（不叠影、不挡镜头、不挤门）
+func _separation() -> Vector2:
+	var sep := Vector2.ZERO
+	if main.party != null:
+		for other in main.party.friends:
+			if other == self or not is_instance_valid(other) or other.dead:
+				continue
+			var d: Vector2 = position - other.position
+			var l: float = d.length()
+			if l < 30.0 and l > 0.01:
+				sep += d / l * (1.0 - l / 30.0)
+	if main.player != null and main.player != self and is_instance_valid(main.player) and not main.player.dead:
+		var dp: Vector2 = position - main.player.position
+		var lp: float = dp.length()
+		if lp < 26.0 and lp > 0.01:
+			sep += dp / lp * (1.0 - lp / 26.0) * 1.4
+	return sep.limit_length(1.2)
 
 
 func _dir_name(d: Vector2) -> String:

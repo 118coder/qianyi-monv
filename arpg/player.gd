@@ -155,6 +155,16 @@ func _physics_process(delta: float) -> void:
 			if ai != null:
 				ai.think(self, main, delta)
 		dir = _ai_dir()
+		if main.party != null:
+			var sep := Vector2.ZERO
+			for other in main.party.friends:
+				if not is_instance_valid(other) or other.dead:
+					continue
+				var dsp: Vector2 = position - other.position
+				var lsp: float = dsp.length()
+				if lsp < 28.0 and lsp > 0.01:
+					sep += dsp / lsp * (1.0 - lsp / 28.0)
+			dir = (dir + sep).normalized() if (dir + sep).length_squared() > 0.001 else dir
 		if ai_want_attack:
 			ai_want_attack = false
 			try_attack(ai_attack_pos)

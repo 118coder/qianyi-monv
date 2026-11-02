@@ -39,7 +39,7 @@ static var CONFIG := {
 	"low_hp_retreat_ratio": 0.25,   # 全局低血撤退线（指令里未单独配置时用）
 
 	# 卡住恢复：先绕行，超时传送到玩家身边并提示
-	"stuck_teleport_after": 6.0,
+	"stuck_teleport_after": 2.5,
 	"think_interval": 0.15,         # AI 决策间隔（队友间自动错相）
 	"nav_repath_interval": 0.8,     # 寻路重算间隔
 	"far_unit_distance": 1200.0,    # 距玩家超过此距离降低决策频率

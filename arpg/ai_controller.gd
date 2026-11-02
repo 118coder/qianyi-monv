@@ -197,15 +197,22 @@ func _stuck_check(unit, main, delta: float) -> void:
 		return
 	if unit.position.distance_to(_last_pos) < 2.0:
 		_stuck_t += delta
-		if _stuck_t > 1.2 and _unstuck_t <= 0.0:
+		# 0.5s：跳过当前路点（多半被转角卡住）
+		if _stuck_t > 0.5 and unit.ai_path_i < unit.ai_path.size():
+			unit.ai_path_i += 1
+		# 0.7s：垂直绕行一拍
+		if _stuck_t > 0.7 and _unstuck_t <= 0.0:
 			_unstuck_t = 0.7
 			var perp: Vector2 = (unit.ai_goal - unit.position).normalized().rotated(PI / 2.0)
 			unit.ai_path = PackedVector2Array([unit.position + perp * 52.0])
 			unit.ai_path_i = 0
+		# 2.5s：传送归队（带特效反馈，读起来是有意的召回）
 		if _stuck_t > float(ArpgPartyConfig.cfg("stuck_teleport_after")):
 			_stuck_t = 0.0
 			unit.teleport_to(main.possession.current_unit.position + Vector2(34, 0))
 			unit.state = "stuck"
+			if main.world != null:
+				main.world.spawn_nova(unit.position, Color(0.6, 0.85, 1.0))
 			print("[AI] %s 卡住，已传送归队" % unit.uid)
 			main.hud.log("%s 卡住了，已传送归队" % unit.unit_name)
 	else:
