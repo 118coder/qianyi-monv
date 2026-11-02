@@ -33,6 +33,20 @@
     "windup": 0.5,
     "xp": 90
   },
+  "char_skills": {
+    "archer": [
+      "arrow_volley",
+      "holy_light"
+    ],
+    "fencer": [
+      "slash_dash",
+      "piercing_shot"
+    ],
+    "witch": [
+      "flame_nova",
+      "meteor"
+    ]
+  },
   "chars": {
     "archer": {
       "atk": 10,
@@ -254,6 +268,50 @@
       "xp": 8
     }
   },
+  "equip_slots": [
+    "weapon",
+    "armor",
+    "trinket"
+  ],
+  "equipment": {
+    "armor_leather": {
+      "def": 2,
+      "hp": 10,
+      "name": "皮甲",
+      "price": 50,
+      "slot": "armor",
+      "tier": 1
+    },
+    "armor_plate": {
+      "def": 5,
+      "hp": 25,
+      "name": "板甲",
+      "price": 200,
+      "slot": "armor",
+      "tier": 2
+    },
+    "sword_flame": {
+      "atk": 7,
+      "name": "焰纹剑",
+      "price": 220,
+      "slot": "weapon",
+      "tier": 2
+    },
+    "sword_iron": {
+      "atk": 3,
+      "name": "铁剑",
+      "price": 60,
+      "slot": "weapon",
+      "tier": 1
+    },
+    "trinket_ring": {
+      "name": "回响指环",
+      "price": 120,
+      "slot": "trinket",
+      "sp": 20,
+      "tier": 1
+    }
+  },
   "floor_enemy_count_base": 5,
   "floor_enemy_count_per": 2,
   "floor_pools": {
@@ -340,6 +398,8 @@
       ]
     ]
   },
+  "gold_drop_max": 6,
+  "gold_drop_min": 2,
   "items": {
     "gems": {
       "kind": "goods",
@@ -389,7 +449,8 @@
         1.0,
         0.42,
         0.48
-      ]
+      ],
+      "value": 25
     }
   },
   "loot_base": [
@@ -468,6 +529,123 @@
     "stuck_teleport_after": 6.0,
     "think_interval": 0.15,
     "xp_share_ratio": 1.0
+  },
+  "quests": {
+    "q_boss": {
+      "count": 1,
+      "desc": "击败魔王巴洛尔",
+      "name": "魔王讨伐",
+      "rewards": {
+        "gold": 200
+      },
+      "target": "boss",
+      "type": "kill"
+    },
+    "q_depth": {
+      "count": 3,
+      "desc": "到达地下 3 层",
+      "name": "深入地牢",
+      "rewards": {
+        "gold": 60
+      },
+      "type": "reach_floor"
+    },
+    "q_hunt": {
+      "count": 8,
+      "desc": "击败 8 只任意魔物",
+      "name": "讨伐魔物",
+      "rewards": {
+        "gold": 40,
+        "xp": 20
+      },
+      "target": "any",
+      "type": "kill"
+    },
+    "q_ore": {
+      "count": 5,
+      "desc": "拾取 5 个铁矿",
+      "name": "铁矿收集",
+      "rewards": {
+        "gold": 30,
+        "item": {
+          "potion": 2
+        }
+      },
+      "target": "ore",
+      "type": "collect"
+    }
+  },
+  "sell_ratio": 0.6,
+  "shop_stock": {
+    "always": [
+      "potion",
+      "herb"
+    ],
+    "tier2": [
+      "sword_iron",
+      "armor_leather",
+      "trinket_ring"
+    ],
+    "tier3": [
+      "sword_flame",
+      "armor_plate"
+    ]
+  },
+  "skills": {
+    "arrow_volley": {
+      "cd": 2.8,
+      "desc": "向前方扇形射出 5 支箭",
+      "dmg_mult": 1.0,
+      "kind": "volley",
+      "name": "迅捷连射",
+      "sp": 20,
+      "unlock_level": 1
+    },
+    "flame_nova": {
+      "cd": 3.5,
+      "desc": "爆发火焰环，环射 12 枚火球",
+      "dmg_mult": 1.4,
+      "kind": "nova",
+      "name": "烈焰环",
+      "sp": 26,
+      "unlock_level": 1
+    },
+    "holy_light": {
+      "cd": 5.0,
+      "desc": "回复 35% 最大生命",
+      "heal": 0.35,
+      "kind": "heal",
+      "name": "圣光术",
+      "sp": 20,
+      "unlock_level": 3
+    },
+    "meteor": {
+      "cd": 4.5,
+      "desc": "更强的爆炎与冲击",
+      "dmg_mult": 1.8,
+      "kind": "nova",
+      "name": "陨星术",
+      "sp": 32,
+      "unlock_level": 6
+    },
+    "piercing_shot": {
+      "cd": 3.0,
+      "desc": "五连矢，更快更痛",
+      "dmg_mult": 1.5,
+      "kind": "volley",
+      "name": "穿透箭",
+      "sp": 24,
+      "unlock_level": 5
+    },
+    "slash_dash": {
+      "cd": 2.2,
+      "desc": "向前突进，斩击路径上的敌人",
+      "dmg_mult": 1.7,
+      "kind": "dash",
+      "name": "冲斩",
+      "sp": 18,
+      "unlock_level": 1
+    }
   },
   "trap_chance": 0.45,
   "xp_base": 18,

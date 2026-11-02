@@ -62,6 +62,13 @@ var _want_apc := false        # --apc 调试招募
 var _squad_cmd_i := 0
 var player_combat_t := 0.0
 
+# RPG 元系统（背包/金币/装备/任务/商店/存档）
+var rpg: ArpgRpgState
+var quests: ArpgQuestManager
+var shop: ArpgShop
+var save_sys: ArpgSaveSystem
+var _menu_open := false
+
 # 热重载监视
 var _watch_t := 0.0
 var _balance_mtime := 0
@@ -109,6 +116,14 @@ func _ready() -> void:
 	_map_mtime = _file_mtime(SrpgMapLoader.PATH)
 	arbiter = ArpgPickupArbiter.new()
 	arbiter.main = self
+	rpg = ArpgRpgState.new()
+	rpg.setup()
+	quests = ArpgQuestManager.new()
+	quests.setup(self)
+	shop = ArpgShop.new()
+	shop.setup(self)
+	save_sys = ArpgSaveSystem.new()
+	save_sys.setup(self)
 
 
 ## 用代码注册输入映射（免改 project.godot）：键盘 + Xbox/PS 手柄通用语义键位
@@ -181,6 +196,8 @@ func _setup_input() -> void:
 		"debug_panel": [KEY_F1],
 		"save_party": [KEY_F9],
 		"load_party": [KEY_F10],
+		"char_menu": [KEY_C],
+		"skill2": [KEY_L],
 		"reload_balance": [KEY_F2],
 		"reload_map": [KEY_F3],
 		"restart_run": [KEY_F4],
@@ -211,7 +228,9 @@ func start_run(id: String) -> void:
 	char_id = id
 	floor_no = 1
 	kills = 0
-	bag = ["potion", "potion", "potion"]
+	rpg.setup()   # 刷新背包容量/任务表；金币与物品跨局保留（商店循环）
+	if not rpg.inventory.has("potion"):
+		rpg.inventory.add("potion", 3)
 	# 重新开局：清空旧队伍
 	if party != null:
 		for f in party.friends:
@@ -326,6 +345,7 @@ func build_floor() -> void:
 	hud.play_hud.visible = true
 	hud.show_boss_bar(dungeon.boss_floor, 1.0, ArpgBalance.BOSS["name"] if dungeon.boss_floor else "")
 	hud.log("—— 地下 %d 层 ——" % floor_no)
+	quests.on_reach_floor(floor_no)
 	_hud_static()
 
 
@@ -527,12 +547,12 @@ func _near_room(pos: Vector2) -> Rect2i:
 # ———————— 拾取 / 消耗 / 掉落 ————————
 
 func try_pickup(item_id: String) -> bool:
-	if bag.size() >= ArpgBalance.BAG_CAP:
+	if not rpg.inventory.add(item_id):
 		bag_full_warn()
 		return false
-	bag.append(item_id)
+	quests.on_pickup(item_id)
 	var iname: String = ArpgBalance.ITEMS[item_id]["name"]
-	hud.log("获得 %s（%d/%d）" % [iname, bag.size(), ArpgBalance.BAG_CAP])
+	hud.log("获得 %s（%d/%d 格）" % [iname, rpg.inventory.used(), rpg.inventory.cap])
 	play_sfx("cursor")
 	return true
 
@@ -544,13 +564,14 @@ func on_player_pickup(item_id: String) -> void:
 
 ## 拾取仲裁回调：AI 队友收取（共享背包，日志注明去向——需求书 §5.5）
 func try_pickup_for(unit, drop_id: int) -> bool:
-	if bag.size() >= ArpgBalance.BAG_CAP:
+	var item_str: String = world.pickups.item_of(drop_id)
+	if not rpg.inventory.add(item_str):
 		bag_full_warn()
 		return false
 	var item_id: String = world.pickups.take_by_id(drop_id)
-	bag.append(item_id)
+	quests.on_pickup(item_id)
 	var iname: String = ArpgBalance.ITEMS[item_id]["name"]
-	hud.log("%s 拾取 %s（%d/%d）" % [(unit.uid if unit != null else "?"), iname, bag.size(), ArpgBalance.BAG_CAP])
+	hud.log("%s 拾取 %s（%d/%d 格）" % [(unit.uid if unit != null else "?"), iname, rpg.inventory.used(), rpg.inventory.cap])
 	play_sfx("cursor", -10.0)
 	return true
 
@@ -580,8 +601,30 @@ func party_rows() -> Array:
 
 
 ## 调试面板内容（需求书 §5.8）：AI 状态 / 指令 / 目标 / 拾取仲裁 / 主控
+func _toggle_menu() -> void:
+	_menu_open = not _menu_open
+	if _menu_open:
+		get_tree().paused = true
+		hud.show_menu_ui(_menu_snapshot())
+	else:
+		get_tree().paused = false
+		hud.hide_menu_ui()
+
+
+func _menu_snapshot() -> Dictionary:
+	return {"rpg": rpg, "player": player, "party": party, "quests": quests, "shop": shop, "save_sys": save_sys}
+
+
+func _menu_close() -> void:
+	if _menu_open:
+		_menu_open = false
+		get_tree().paused = false
+		hud.hide_menu_ui()
+
+
 func _debug_rows() -> Array:
 	var out := []
+	out.append("金币 %dG · 背包 %d/%d 格 · 任务 %d" % [rpg.gold, rpg.inventory.used(), rpg.inventory.cap, quests.rows().size()])
 	if player != null:
 		out.append("[P] %s %s cmd=%s state=%s HP=%d/%d" % [
 			player.uid, player.uname, player.command, player.state, player.hp, player.max_hp])
@@ -598,57 +641,32 @@ func _debug_rows() -> Array:
 
 ## 调试存档（F9/F10）：队伍稳定 ID + 指令 + 状态往返（需求书 §6 存档要求）
 func _save_party() -> void:
-	var d := {"party": party.to_dict(), "floor": floor_no, "bag": bag}
-	var f := FileAccess.open("user://party_save.json", FileAccess.WRITE)
-	if f == null:
-		hud.log("队伍存档失败")
-		return
-	f.store_string(JSON.stringify(d, "  "))
-	f.close()
-	hud.log("已保存队伍存档（F10 读取）")
+	save_sys.save_game()
 
 
 func _load_party() -> void:
-	if not FileAccess.file_exists("user://party_save.json"):
-		hud.log("没有队伍存档（F9 保存）")
-		return
-	var f := FileAccess.open("user://party_save.json", FileAccess.READ)
-	var parsed = JSON.parse_string(f.get_as_text())
-	f.close()
-	if parsed == null or not (parsed is Dictionary):
-		hud.log("存档损坏")
-		return
-	bag = parsed.get("bag", bag)
-	party.from_dict(parsed.get("party", {}))
+	var err: String = save_sys.load_game()
+	if err != "":
+		hud.log("读档失败：" + err)
+	_menu_close()
 
 
 func drink_potion() -> void:
-	for i in bag.size():
-		if bag[i] == "potion":
-			bag.remove_at(i)
-			var heal: int = ArpgBalance.ITEMS["potion"]["heal"]
-			var u = possession.current_unit if possession != null else player
-			u.hp = mini(u.max_hp, u.hp + heal)
-			if u == player:
-				player.restore_sp(20)
-				player.hp_bar.update_values(float(player.hp) / player.max_hp, float(player.sp) / player.max_sp)
-			else:
-				u.sp = mini(u.max_sp, u.sp + 20)
-				u.hp_bar.set_ratio(float(u.hp) / u.max_hp)
-			world.spawn_popup("+%d" % heal, u.position, Color(0.5, 1, 0.55))
-			world.spawn_nova(u.position, Color(0.5, 1, 0.6))
-			hud.log("%s 喝下回复药水（剩 %d 瓶）" % ["你" if u == player else u.unit_name, _potion_count()])
-			play_sfx("heal")
-			return
-	hud.log("没有药水了！")
+	if not rpg.inventory.remove("potion", 1):
+		hud.log("没有药水了！")
+		return
+	var heal: int = int(ArpgBalance.ITEMS["potion"]["heal"])
+	var u = possession.current_unit if possession != null else player
+	u.hp = mini(u.max_hp, u.hp + heal)
+	u.heal_flash()
+	world.spawn_popup("+%d" % heal, u.position, Color(0.5, 1, 0.55))
+	world.spawn_nova(u.position, Color(0.5, 1, 0.6))
+	hud.log("%s 喝下回复药水（剩 %d 瓶）" % ["你" if u == player else u.unit_name, _potion_count()])
+	play_sfx("heal")
 
 
 func _potion_count() -> int:
-	var n := 0
-	for it in bag:
-		if it == "potion":
-			n += 1
-	return n
+	return rpg.inventory.count("potion")
 
 
 func on_mob_dead(i: int) -> void:
@@ -720,6 +738,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		party.set_squad_command(["active", "follow", "hold"][_squad_cmd_i])
 	elif event.is_action_pressed("debug_panel"):
 		hud.toggle_debug()
+	elif event.is_action_pressed("char_menu"):
+		_toggle_menu()
 	elif event.is_action_pressed("save_party"):
 		_save_party()
 	elif event.is_action_pressed("load_party"):
@@ -748,9 +768,9 @@ func _settle(win: bool, title: String, flavor: String) -> void:
 	hud.show_boss_bar(false, 0.0, "")
 	# 商品盘点（死亡折损一半）
 	var counts := {}
-	for it in bag:
-		if ArpgBalance.ITEMS[it]["kind"] == "goods":
-			counts[it] = counts.get(it, 0) + 1
+	for r in rpg.inventory.rows():
+		if r["kind"] == "goods":
+			counts[r["id"]] = counts.get(r["id"], 0) + int(r["count"])
 	var lines := []
 	var total := 0
 	for id in counts:

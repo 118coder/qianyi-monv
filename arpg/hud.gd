@@ -43,6 +43,20 @@ var debug_panel: PanelContainer
 var debug_label: Label
 var _debug_visible := false
 
+# 角色菜单 / 商店 / 任务提示
+var game: Node
+var menu_root: Control
+var menu_tabs := {}
+var menu_content: VBoxContainer
+var menu_header: Label
+var _menu_tab := "状态"
+var _menu_ctx := {}
+var shop_root: Control
+var shop_gold: Label
+var shop_list: VBoxContainer
+var shop_tab := "buy"
+var toast_label: Label
+
 var _logs := []
 
 
@@ -64,6 +78,334 @@ func _ready() -> void:
 	_build_pause()
 	_build_party_panel()
 	_build_debug_panel()
+	_build_menu_ui()
+	_build_shop_ui()
+	_build_toast()
+
+
+## 队伍面板：可滚动，支持任意 N（需求书 §5.7）
+func _build_toast() -> void:
+	toast_label = _label(16, Color(1, 0.9, 0.4))
+	toast_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	toast_label.anchor_left = 0.5
+	toast_label.anchor_right = 0.5
+	toast_label.offset_left = -220
+	toast_label.offset_right = 220
+	toast_label.offset_top = 74
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_label.visible = false
+	root.add_child(toast_label)
+
+
+func set_quest_toast(text: String) -> void:
+	toast_label.text = "✦ 任务完成：%s" % text
+	toast_label.visible = true
+	var tw := create_tween()
+	tw.tween_interval(2.5)
+	tw.tween_property(toast_label, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(func():
+		toast_label.visible = false
+		toast_label.modulate.a = 1.0)
+
+
+func _build_menu_ui() -> void:
+	menu_root = Control.new()
+	menu_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	menu_root.visible = false
+	root.add_child(menu_root)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.62)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	menu_root.add_child(dim)
+	var panel := _panel_box()
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -370
+	panel.offset_right = 370
+	panel.offset_top = -280
+	panel.offset_bottom = 280
+	menu_root.add_child(panel)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	panel.add_child(v)
+	menu_header = _label(20, Color(1, 0.95, 0.75))
+	v.add_child(menu_header)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 6)
+	v.add_child(tabs)
+	for tname in ["状态", "背包", "技能", "任务", "系统"]:
+		var b := Button.new()
+		b.text = tname
+		b.toggle_mode = true
+		b.button_pressed = tname == "状态"
+		b.pressed.connect(_switch_menu_tab.bind(tname))
+		tabs.add_child(b)
+		menu_tabs[tname] = b
+	menu_content = VBoxContainer.new()
+	menu_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	menu_content.add_theme_constant_override("separation", 4)
+	v.add_child(menu_content)
+	var hint := _label(12, Color(1, 1, 1, 0.55), "C / Esc 关闭 · 菜单打开时游戏暂停")
+	v.add_child(hint)
+	menu_root.visible = false
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if menu_root != null and menu_root.visible:
+		if event.is_action_pressed("char_menu") or event.is_action_pressed("ui_cancel"):
+			game._menu_close()
+			get_viewport().set_input_as_handled()
+
+
+func _switch_menu_tab(tname: String) -> void:
+	_menu_tab = tname
+	refresh_menu_ui()
+
+
+func refresh_menu_ui() -> void:
+	if not menu_root.visible or _menu_ctx.is_empty():
+		return
+	var rpg = _menu_ctx["rpg"]
+	var player = _menu_ctx["player"]
+	menu_header.text = "%s · Lv %d · %dG" % [player.uname, player.level, rpg.gold]
+	for t in menu_tabs:
+		menu_tabs[t].button_pressed = t == _menu_tab
+	for c in menu_content.get_children():
+		c.queue_free()
+	match _menu_tab:
+		"状态":
+			_page_status()
+		"背包":
+			_page_bag()
+		"技能":
+			_page_skills()
+		"任务":
+			_page_quests()
+		"系统":
+			_page_sys()
+
+
+func refresh_shop() -> void:
+	var rpg = _menu_ctx["rpg"] if not _menu_ctx.is_empty() else game.rpg
+	shop_gold.text = "金币 %dG" % rpg.gold
+	for c in shop_list.get_children():
+		c.queue_free()
+	if shop_tab == "buy":
+		for iid in game.shop.stock():
+			var price: int = game.shop.price_of(iid)
+			shop_list.add_child(_menu_row("%s —— %dG" % [game.shop.name_of(iid), price],
+				[["购买", func():
+					game.shop.buy(iid)
+					refresh_shop()]]))
+	else:
+		var rows: Array = rpg.inventory.rows()
+		if rows.is_empty():
+			shop_list.add_child(_label(13, Color(1, 1, 1, 0.5), "（背包空空如也）"))
+		for i in rows.size():
+			var r: Dictionary = rows[i]
+			var gain: int = maxi(1, int(round(int(r["value"]) * float(ArpgBalance.data.get("sell_ratio", 0.6))))) * int(r["count"])
+			shop_list.add_child(_menu_row("%s ×%d —— +%dG" % [r["name"], r["count"], gain],
+				[["卖出", func():
+					game.shop.sell_slot(i)
+					refresh_shop()]]))
+
+
+func _menu_row(text: String, btn_defs: Array = []) -> Control:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	var l := _label(14, Color.WHITE, text)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(l)
+	for bd in btn_defs:
+		var b := Button.new()
+		b.text = bd[0]
+		b.pressed.connect(bd[1])
+		h.add_child(b)
+	return h
+
+
+func _page_status() -> void:
+	var rpg = _menu_ctx["rpg"]
+	var player = _menu_ctx["player"]
+	var need: int = int(ArpgBalance.xp_need(player.level))
+	menu_content.add_child(_menu_row("等级 %d    经验 %d/%d" % [player.level, player.xp, need]))
+	menu_content.add_child(_menu_row("HP %d/%d    SP %d/%d" % [player.hp, player.max_hp, player.sp, player.max_sp]))
+	menu_content.add_child(_menu_row("攻击 %d（含装备）    防御 %d    移速 %d" % [player.eff_atk(), player.eff_def(), int(player.spd)]))
+	menu_content.add_child(_menu_row("金币 %dG" % rpg.gold))
+	menu_content.add_child(HSeparator.new())
+	menu_content.add_child(_label(14, Color(1, 0.9, 0.6), "装备"))
+	for slot in ArpgBalance.data.get("equip_slots", []):
+		var iid: String = rpg.equipped.get(slot, "")
+		var eq: Dictionary = ArpgBalance.data.get("equipment", {}).get(iid, {})
+		var txt: String = ("%s：%s" % [slot, eq.get("name", "（空）")]) if iid != "" else ("%s：（空）" % slot)
+		var btns := []
+		if iid != "":
+			btns.append(["卸下", func(): _menu_equip_off(slot)])
+		menu_content.add_child(_menu_row(txt, btns))
+
+
+func _page_bag() -> void:
+	var rpg = _menu_ctx["rpg"]
+	menu_content.add_child(_menu_row("背包 %d/%d 格" % [rpg.inventory.used(), rpg.inventory.cap]))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.custom_minimum_size = Vector2(0, 230)
+	menu_content.add_child(scroll)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(v)
+	var rows: Array = rpg.inventory.rows()
+	if rows.is_empty():
+		v.add_child(_label(13, Color(1, 1, 1, 0.5), "（空空如也）"))
+	for i in rows.size():
+		var r: Dictionary = rows[i]
+		var btns := []
+		if r["kind"] == "use":
+			btns.append(["使用", func(): _menu_use(i)])
+		if r["kind"] == "equip":
+			btns.append(["装备", func(): _menu_equip(str(r["id"]))])
+		btns.append(["丢弃", func(): _menu_drop(i)])
+		v.add_child(_menu_row("%s ×%d（%s）" % [r["name"], r["count"], r["kind"]], btns))
+
+
+func _page_skills() -> void:
+	var player = _menu_ctx["player"]
+	var all_ids: Array = ArpgBalance.data.get("char_skills", {}).get(player.char_id, [])
+	for sid in all_ids:
+		var def: Dictionary = ArpgBalance.data.get("skills", {}).get(str(sid), {})
+		if def.is_empty():
+			continue
+		var locked: bool = player.level < int(def.get("unlock_level", 1))
+		var col := Color(0.55, 0.55, 0.6) if locked else Color.WHITE
+		menu_content.add_child(_label(14, col, "%s  [Lv%d 解锁]  SP%d  CD%.1fs
+    %s" % [
+			def.get("name", sid), def.get("unlock_level", 1), def.get("sp", 0), def.get("cd", 0), def.get("desc", "")]))
+
+
+func _page_quests() -> void:
+	var quests = _menu_ctx["quests"]
+	for r in quests.rows():
+		var col := Color(0.6, 0.95, 0.6) if r["state"] == "done" else (Color(0.55, 0.55, 0.6) if r["state"] == "claimed" else Color.WHITE)
+		var prog: String = ("（%d/%d）" % [r["progress"], r["count"]]) if r["state"] == "active" else ""
+		menu_content.add_child(_menu_row("【%s】%s %s" % [r["state"], r["name"], prog]))
+		menu_content.add_child(_label(12, Color(1, 1, 1, 0.65), "    %s    奖励：%s" % [r["desc"], str(r["rewards"])]))
+		if r["state"] == "done":
+			menu_content.add_child(_menu_row("", [["领取奖励", func(): _menu_claim(str(r["id"]))]]))
+		menu_content.add_child(HSeparator.new())
+
+
+func _page_sys() -> void:
+	menu_content.add_child(_menu_row("", [["保存存档 (F9)", func():
+		_menu_ctx["save_sys"].save_game()
+		refresh_menu_ui()]]))
+	menu_content.add_child(_menu_row("", [["读取存档 (F10)", func():
+		hide_menu_ui()
+		_menu_ctx["save_sys"].load_game()]]))
+	menu_content.add_child(_menu_row("", [["回到标题", func():
+		hide_menu_ui()
+		game._menu_close()
+		game._back_to_title()]]))
+
+
+func _menu_use(slot_idx: int) -> void:
+	var rows: Array = _menu_ctx["rpg"].inventory.rows()
+	if slot_idx < rows.size() and rows[slot_idx]["id"] == "potion":
+		game.drink_potion()
+	refresh_menu_ui()
+
+
+func _menu_equip(item_id: String) -> void:
+	if _menu_ctx["rpg"].equip(item_id):
+		_menu_ctx["player"].recalc_equipment()
+		game.hud.log("已装备")
+	refresh_menu_ui()
+
+
+func _menu_equip_off(slot: String) -> void:
+	if _menu_ctx["rpg"].unequip(slot):
+		_menu_ctx["player"].recalc_equipment()
+	refresh_menu_ui()
+
+
+func _menu_drop(slot_idx: int) -> void:
+	var rows: Array = _menu_ctx["rpg"].inventory.rows()
+	if slot_idx < rows.size():
+		_menu_ctx["rpg"].inventory.remove(str(rows[slot_idx]["id"]), int(rows[slot_idx]["count"]))
+	refresh_menu_ui()
+
+
+func _menu_claim(qid: String) -> void:
+	_menu_ctx["quests"].claim(qid)
+	refresh_menu_ui()
+
+
+## 队伍面板：可滚动，支持任意 N（需求书 §5.7）
+
+
+func show_menu_ui(snap: Dictionary) -> void:
+	menu_root.visible = true
+	_menu_ctx = snap
+	refresh_menu_ui()
+
+
+func hide_menu_ui() -> void:
+	menu_root.visible = false
+
+
+func _build_shop_ui() -> void:
+	shop_root = Control.new()
+	shop_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shop_root.visible = false
+	root.add_child(shop_root)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shop_root.add_child(dim)
+	var panel := _panel_box()
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -330
+	panel.offset_right = 330
+	panel.offset_top = -250
+	panel.offset_bottom = 250
+	shop_root.add_child(panel)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	panel.add_child(v)
+	shop_gold = _label(20, Color(1, 0.85, 0.35))
+	v.add_child(shop_gold)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 6)
+	v.add_child(tabs)
+	for pair in [["买入", "buy"], ["卖出", "sell"]]:
+		var b := Button.new()
+		b.text = pair[0]
+		b.toggle_mode = true
+		b.button_pressed = pair[1] == "buy"
+		b.pressed.connect(func():
+			shop_tab = pair[1]
+			refresh_shop())
+		tabs.add_child(b)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(scroll)
+	shop_list = VBoxContainer.new()
+	shop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(shop_list)
+	var close := Button.new()
+	close.text = "离开商店"
+	close.pressed.connect(func(): shop_root.visible = false)
+	v.add_child(close)
+	shop_root.visible = false
+
+
+func show_shop() -> void:
+	shop_root.visible = true
+	refresh_shop()
 
 
 ## 队伍面板：可滚动，支持任意 N（需求书 §5.7）
@@ -334,7 +676,9 @@ func _build_select() -> void:
 		cards.add_child(_char_card(id))
 
 	var hint := _label(14, Color(1, 1, 1, 0.6),
-		"移动 WASD/方向键/左摇杆    普攻 J/Z/A·RT    技能 K/X/X·LT    药水 Q/Y    互动 E/B    暂停 Esc/Start\nTab 切换主控    T 队伍指令（进攻/跟随/待机）    F1 调试面板    F9/F10 队伍存档\n升级会完全回满 HP/SP · 宝箱有陷阱 · 背包上限 20 · 打倒第 5 层魔王即可凯旋 · 手柄带震动")
+		"移动 WASD/左摇杆    普攻 J/Z/A·RT    技能 K/X·LT / L    药水 Q/Y    互动 E/B    暂停 Esc/Start
+Tab 切换主控    T 队伍指令    C 角色菜单    F1 调试面板    F9/F10 存档    F2 重载平衡    F3 重载地图    F4 重开
+升级完全回满 · 宝箱陷阱 · 背包上限 20 · 击败第 5 层魔王凯旋 · 手柄带震动 · 店铺试营业")
 	hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	hint.anchor_left = 0.5
 	hint.anchor_right = 0.5
@@ -429,10 +773,28 @@ func _build_settle() -> void:
 	settle_total = _label(20, Color(1, 0.85, 0.35))
 	settle_total.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(settle_total)
+	var bh := HBoxContainer.new()
+	bh.alignment = BoxContainer.ALIGNMENT_CENTER
+	bh.add_theme_constant_override("separation", 12)
+	v.add_child(bh)
 	var btn := Button.new()
 	btn.text = "回到标题"
 	btn.pressed.connect(func(): back_to_title.emit())
-	v.add_child(btn)
+	bh.add_child(btn)
+	var btn3 := Button.new()
+	btn3.text = "进入店铺"
+	btn3.custom_minimum_size = Vector2(140, 0)
+	btn3.pressed.connect(func(): show_shop())
+	bh.add_child(btn3)
+	var btn4 := Button.new()
+	btn4.text = "一键卖出战利品"
+	btn4.custom_minimum_size = Vector2(160, 0)
+	btn4.pressed.connect(func():
+		var g: int = game.shop.sell_all_goods()
+		if g > 0:
+			settle_total.text = "已售出 +%dG（金币 %dG）" % [g, game.rpg.gold]
+	)
+	bh.add_child(btn4)
 
 
 func show_settle(title: String, title_col: Color, stats: String, goods: String, total: int) -> void:

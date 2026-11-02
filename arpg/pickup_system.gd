@@ -75,6 +75,11 @@ func take_by_id(drop_id: int) -> String:
 	return take(_index_of_id(drop_id))
 
 
+func item_of(drop_id: int) -> String:
+	var i := _index_of_id(drop_id)
+	return item[i] if i >= 0 else ""
+
+
 func _index_of_id(drop_id: int) -> int:
 	for i in count:
 		if alive[i] == 1 and ids[i] == drop_id:
@@ -111,7 +116,7 @@ func _physics_process(delta: float) -> void:
 	# 拾取：玩家优先（覆盖任何 AI 认领）；背包满留在地上并提示（节流）
 	var i2 := nearest(pl.position, 17.0)
 	if i2 >= 0:
-		if world.main.bag.size() < ArpgBalance.BAG_CAP:
+		if not world.main.rpg.inventory.is_full():
 			var drop_id: int = ids[i2]
 			var item_id := take(i2)
 			world.main.arbiter.player_took(drop_id)

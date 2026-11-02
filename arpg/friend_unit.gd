@@ -245,26 +245,44 @@ func try_attack(target_pos: Vector2) -> void:
 	main.play_sfx("attack", -10.0)
 
 
+func heal_flash() -> void:
+	hp_bar.set_ratio(float(hp) / max_hp)
+	sprite.modulate = Color(0.55, 1, 0.65)
+	var tw := create_tween()
+	tw.tween_property(sprite, "modulate", Color.WHITE, 0.25)
+
+
+## 技能 v2：取职业表第一个解锁技能（数据驱动，与玩家同源）
 func try_skill(target_pos: Vector2) -> void:
-	if dead or skill_cd > 0.0 or sp < 18:
+	if dead or skill_cd > 0.0:
 		return
-	skill_cd = 3.0
-	sp -= 18
+	var ids: Array = ArpgBalance.data.get("char_skills", {}).get(char_id, [])
+	if ids.is_empty():
+		return
+	var def: Dictionary = ArpgBalance.data.get("skills", {}).get(str(ids[0]), {})
+	if def.is_empty() or sp < int(def["sp"]):
+		return
+	sp -= int(def["sp"])
+	skill_cd = float(def["cd"])
 	var to_t := target_pos - position
 	var dir := to_t.normalized() if to_t.length_squared() > 1.0 else _face_vec()
-	match weapon:
-		"melee":
+	var mult := float(def.get("dmg_mult", 1.0))
+	match str(def.get("kind", "nova")):
+		"dash":
 			lunge = dir * 360.0
 			for i in world.mobs_in_arc(position + dir * 30.0, dir.angle(), atk_range + 14.0):
-				world.damage_mob(i, atk * 17 / 10, position, 260.0, true)
+				world.damage_mob(i, int(atk * mult), position, 260.0, true)
 			world.spawn_slash(position + dir * 16.0, dir.angle(), Color(0.7, 0.95, 1.0))
-		"ranged":
+		"volley":
 			for i in 5:
 				world.spawn_projectile(position + dir * 14.0, dir.rotated(deg_to_rad(-24.0 + i * 12.0)),
 					proj_spd, atk, "player", Color(0.62, 1.0, 0.8), "arrow")
+		"heal":
+			heal_by(int(max_hp * float(def.get("heal", 0.3))))
+			world.spawn_nova(position, Color(0.55, 1, 0.65))
 		_:
 			for i in world.mobs_in_radius(position, 90.0):
-				world.damage_mob(i, atk * 14 / 10, position, 300.0, true)
+				world.damage_mob(i, int(atk * mult), position, 300.0, true)
 			for i in 12:
 				world.spawn_projectile(position, Vector2.RIGHT.rotated(TAU * i / 12.0), 265.0, atk, "player", Color(1.0, 0.6, 0.28), "bullet")
 			world.spawn_nova(position, Color(0.6, 0.7, 1.0))

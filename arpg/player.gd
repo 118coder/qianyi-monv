@@ -37,6 +37,8 @@ var char_id := "fencer"
 var tpl := {}
 var level := 1
 var xp := 0
+var equip_hp := 0            # 装备 HP 上限增量（换装回退再加）
+var dash_dmg_mult := 1.7     # 冲斩倍率（技能表参数化）
 var max_hp := 100
 var hp := 100
 var max_sp := 50
@@ -189,8 +191,10 @@ func _physics_process(delta: float) -> void:
 	if stun <= 0.0 and possessed:
 		if Input.is_action_just_pressed("attack") and atk_timer <= 0.0:
 			_do_attack()
-		if Input.is_action_just_pressed("skill") and skill_cd <= 0.0 and sp >= int(tpl["skill"]["sp"]):
-			_do_skill()
+		if Input.is_action_just_pressed("skill"):
+			use_skill(0)
+		if Input.is_action_just_pressed("skill2"):
+			use_skill(1)
 
 	if iframes > 0.0:
 		sprite.visible = int(iframes * 14.0) % 2 == 0
@@ -239,13 +243,20 @@ func try_attack(target_pos: Vector2) -> void:
 
 
 func try_skill(target_pos: Vector2) -> void:
-	if skill_cd > 0.0 or sp < int(tpl["skill"]["sp"]):
+	if skill_cd > 0.0:
 		return
 	var to_t := target_pos - position
 	if to_t.length_squared() > 1.0:
 		facing = to_t.normalized()
 		_update_facing_name(to_t)
-	_do_skill()
+	use_skill(0)
+
+
+func heal_flash() -> void:
+	hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
+	sprite.modulate = Color(0.55, 1, 0.65)
+	var tw := create_tween()
+	tw.tween_property(sprite, "modulate", Color.WHITE, 0.25)
 
 
 func teleport_to(p: Vector2) -> void:
@@ -300,48 +311,63 @@ func _do_attack() -> void:
 		pop(1.14, 0.9)
 		world.spawn_slash(position + facing * 13.0, facing.angle())
 		for i in world.mobs_in_arc(position, facing.angle(), atk_range):
-			world.damage_mob(i, atk, position)
+			world.damage_mob(i, eff_atk(), position)
 	elif weapon == "ranged":
 		lunge = -facing * 70.0            # 射击微微后坐
-		world.spawn_projectile(position + facing * 14.0, facing, float(tpl["proj_spd"]), atk, "player", Color(1.0, 0.92, 0.55), "arrow")
+		world.spawn_projectile(position + facing * 14.0, facing, float(tpl["proj_spd"]), eff_atk(), "player", Color(1.0, 0.92, 0.55), "arrow")
 	else:
 		lunge = -facing * 50.0
-		world.spawn_projectile(position + facing * 14.0, facing, float(tpl["proj_spd"]), atk, "player", Color(0.85, 0.55, 1.0), "orb")
+		world.spawn_projectile(position + facing * 14.0, facing, float(tpl["proj_spd"]), eff_atk(), "player", Color(0.85, 0.55, 1.0), "orb")
 	world.main.play_sfx("magic" if weapon == "magic" else "attack", -10.0 if weapon == "magic" else -6.0)
 
 
-# ———————— 专属技能 ————————
+# ———————— 技能系统 v2（数据驱动：balance.skills + char_skills + 等级解锁） ————————
 
-func _do_skill() -> void:
-	var sk: Dictionary = tpl["skill"]
-	sp -= int(sk["sp"])
-	skill_cd = float(sk["cd"])
-	var weapon: String = tpl["weapon"]
-	match weapon:
-		"melee":
+func use_skill(slot: int) -> void:
+	var ids: Array = available_skills()
+	if slot >= ids.size():
+		return
+	var def: Dictionary = ArpgBalance.data.get("skills", {}).get(str(ids[slot]), {})
+	if def.is_empty() or skill_cd > 0.0 or stun > 0.0:
+		return
+	if sp < int(def["sp"]):
+		world.spawn_popup("SP不足", position, Color(0.6, 0.8, 1.0))
+		return
+	sp -= int(def["sp"])
+	skill_cd = float(def["cd"])
+	var mult := float(def.get("dmg_mult", 1.0))
+	var kind := str(def.get("kind", "nova"))
+	match kind:
+		"dash":
 			dash_t = DASH_TIME
 			dash_dir = facing
 			dash_hit = {}
 			dash_ghost_t = 0.0
-			pop(1.3, 0.75)                # 起手拉伸
+			dash_dmg_mult = mult
+			pop(1.3, 0.75)
 			world.spawn_slash(position + facing * 10.0, facing.angle(), Color(0.75, 0.92, 1.0))
-		"ranged":
+		"volley":
 			lunge = -facing * 130.0
 			pop(0.9, 1.1)
 			for i in 5:
-				var ang := deg_to_rad(-24.0 + i * 12.0)
-				world.spawn_projectile(position + facing * 14.0, facing.rotated(ang),
-					float(tpl["proj_spd"]), atk, "player", Color(0.62, 1.0, 0.8), "arrow")
-		"magic":
+				world.spawn_projectile(position + facing * 14.0, facing.rotated(deg_to_rad(-24.0 + i * 12.0)),
+					float(tpl["proj_spd"]), int(eff_atk() * mult), "player", Color(0.62, 1.0, 0.8), "arrow")
+		"heal":
+			var heal := int(max_hp * float(def.get("heal", 0.3)))
+			hp = mini(max_hp, hp + heal)
+			hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
+			world.spawn_popup("+%d" % heal, position, Color(0.5, 1, 0.55))
+			world.spawn_nova(position, Color(0.55, 1, 0.65))
+		_:
 			pop(1.25, 0.85)
 			for i in world.mobs_in_radius(position, 95.0):
-				world.damage_mob(i, atk * 14 / 10, position, 300.0, true)
+				world.damage_mob(i, int(eff_atk() * mult), position, 300.0, true)
 			for i in 12:
-				world.spawn_projectile(position, Vector2.RIGHT.rotated(TAU * i / 12.0), 275.0, atk, "player", Color(1.0, 0.6, 0.28), "bullet")
+				world.spawn_projectile(position, Vector2.RIGHT.rotated(TAU * i / 12.0), 275.0, eff_atk(), "player", Color(1.0, 0.6, 0.28), "bullet")
 			world.spawn_nova(position, Color(1.0, 0.55, 0.25))
-	main.play_sfx("skill" if weapon != "magic" else "fire")
+	main.play_sfx("fire" if kind == "nova" else "skill")
 	main.rumble(0.22, 0.48, 0.2)
-	if weapon == "magic":
+	if kind == "nova":
 		main.add_shake(0.3)
 
 
@@ -350,7 +376,7 @@ func _dash_hits() -> void:
 		if dash_hit.has(i):
 			continue
 		dash_hit[i] = true
-		world.damage_mob(i, atk * 17 / 10, position, 260.0, true)
+		world.damage_mob(i, int(eff_atk() * dash_dmg_mult), position, 260.0, true)
 
 
 # ———————— 受击 / 成长 ————————
@@ -358,7 +384,7 @@ func _dash_hits() -> void:
 func take_damage(dmg: int, from_pos: Vector2) -> void:
 	if dead or iframes > 0.0 or main.state != main.State.PLAY:
 		return
-	hp = maxi(0, hp - dmg)
+	hp = maxi(0, hp - maxi(1, dmg - eff_def()))
 	iframes = 0.55
 	in_combat_until = 4.0
 	knock = (position - from_pos).normalized() * 250.0
@@ -380,6 +406,34 @@ func take_damage(dmg: int, from_pos: Vector2) -> void:
 		main.on_player_dead()
 
 
+## 装备派生属性（装备系统）：背包/装备挂在 RPG 元状态层
+func eff_atk() -> int:
+	return atk + main.rpg.equip_bonus("atk")
+
+
+func eff_def() -> int:
+	return main.rpg.equip_bonus("def")
+
+
+func recalc_equipment() -> void:
+	var bonus: int = main.rpg.equip_bonus("hp")
+	max_hp = max_hp - equip_hp + bonus
+	equip_hp = bonus
+	hp = mini(hp, max_hp)
+	hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
+
+
+## 已解锁技能（等级 + 职业技能表，技能系统 v2）
+func available_skills() -> Array:
+	var ids: Array = ArpgBalance.data.get("char_skills", {}).get(char_id, [])
+	var out := []
+	for sid in ids:
+		var def: Dictionary = ArpgBalance.data.get("skills", {}).get(str(sid), {})
+		if not def.is_empty() and level >= int(def.get("unlock_level", 1)):
+			out.append(sid)
+	return out
+
+
 func gain_xp(x: int) -> void:
 	xp += x
 	while xp >= ArpgBalance.xp_need(level):
@@ -391,6 +445,10 @@ func gain_xp(x: int) -> void:
 		hp = max_hp          # 升级完全回满（策划案核心爽点）
 		sp = max_sp
 		hp_bar.update_values(1.0, 1.0)
+		for sid in available_skills():
+			var sd: Dictionary = ArpgBalance.data.get("skills", {}).get(str(sid), {})
+			if int(sd.get("unlock_level", 99)) == level:
+				world.spawn_popup("解锁技能「%s」！" % sd.get("name", sid), position + Vector2(0, -52), Color(0.7, 0.95, 1.0))
 		world.spawn_popup("LEVEL UP!", position + Vector2(0, -30), Color(1, 0.9, 0.3))
 		world.spawn_nova(position, Color(1, 0.95, 0.5))
 		pop(0.8, 1.25)

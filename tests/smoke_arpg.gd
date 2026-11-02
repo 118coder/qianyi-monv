@@ -40,7 +40,7 @@ func _run() -> void:
 	_check(main.state == main.State.PLAY, "进入 PLAY")
 	_check(main.world.mob_count() >= 5, "第 1 层敌人数 %d" % main.world.mob_count())
 	_check(main.world.chests.size() == 2, "宝箱 ×2")
-	_check(main.bag.size() == 3, "初始药水 ×3")
+	_check(main.rpg.inventory.count("potion") == 3, "初始药水 ×3")
 
 	print("== 3. 数据系统战斗 ==")
 	var player: ArpgPlayer = main.player
@@ -69,12 +69,13 @@ func _run() -> void:
 	print("  弧形查询命中 %d 个" % arc.size())
 
 	print("== 4. 背包 / 药水 / 宝箱 ==")
-	var bag0: int = main.bag.size()
+	var herb0: int = main.rpg.inventory.count("herb")
 	main.try_pickup("herb")
-	_check(main.bag.size() == bag0 + 1, "拾取入包")
+	_check(main.rpg.inventory.count("herb") == herb0 + 1, "拾取入包（堆叠）")
 	for i in 30:
 		main.try_pickup("ore")
-	_check(main.bag.size() == ArpgBalance.BAG_CAP, "背包上限 20")
+	_check(main.rpg.inventory.count("ore") >= 30, "同类堆叠 30 个不占新格")
+	_check(main.rpg.inventory.used() <= main.rpg.inventory.cap, "不超容量")
 	main.bag_full_warn()
 	var hp2: int = player.hp
 	player.take_damage(30, player.position + Vector2(10, 0))
@@ -189,6 +190,53 @@ func _run() -> void:
 		await create_timer(0.2).timeout
 	_check(restored, "恢复文件数值（%d）" % imp_hp)
 	main.world.mobs.apply_balance()
+
+	print("== 9. RPG 系统（背包/装备/技能/任务/商店/存档） ==")
+	# 背包：堆叠 + 容量原子性
+	var inv := ArpgInventory.new()
+	inv.setup(4)
+	_check(inv.add("potion", 5), "堆叠添加")
+	_check(inv.count("potion") == 5 and inv.used() == 1, "同类堆叠不占多格")
+	_check(inv.add("herb") and inv.add("ore") and inv.add("gems"), "新格添加至满")
+	_check(not inv.add("orb"), "容量满拒绝（原子性）")
+	_check(inv.remove("potion", 3) and inv.count("potion") == 2, "部分移除")
+	# 装备：加成与回退
+	main.rpg.inventory.add("sword_iron")
+	var base_atk: int = main.player.atk
+	_check(main.rpg.equip("sword_iron"), "穿装备")
+	_check(main.player.eff_atk() == base_atk + 3, "攻击加成生效（+%d）" % (main.player.eff_atk() - base_atk))
+	main.rpg.unequip("weapon")
+	_check(main.player.eff_atk() == base_atk, "卸下回退")
+	# 技能 v2：解锁/冷却
+	var sks: Array = main.player.available_skills()
+	_check(sks.size() >= 1, "技能解锁查询（%d 个）" % sks.size())
+	var sp0: int = main.player.sp
+	main.player.use_skill(0)
+	_check(main.player.skill_cd > 0.0, "技能进入冷却")
+	_check(main.player.sp < sp0, "技能消耗 SP")
+	# 任务：进度/完成/领奖
+	var gold0: int = main.rpg.gold
+	for i in 8:
+		main.rpg.quest_progress("kill", "any", 1)
+	var claimed: String = main.quests.claim("q_hunt")
+	_check(claimed != "", "任务完成并领奖")
+	_check(main.rpg.gold > gold0, "任务奖励金币入账")
+	# 商店：买入校验/卖出
+	main.rpg.inventory.remove("ore", 99)
+	main.rpg.gold = 500
+	_check(main.shop.buy("potion") == "", "商店买入")
+	main.rpg.gold = 5
+	_check(main.shop.buy("sword_flame").contains("金币不足"), "金币不足校验")
+	main.rpg.gold = 500
+	main.rpg.inventory.add("orb")
+	_check(main.shop.sell_all_goods() >= 0, "一键卖出")
+	# 存档 v2 往返
+	var g_snap: int = main.rpg.gold
+	_check(main.save_sys.save_game(), "存档 v2 写入")
+	main.rpg.gold = 1
+	var err: String = main.save_sys.load_game()
+	_check(err == "", "读档无错误")
+	_check(main.rpg.gold == g_snap, "金币往返一致")
 
 	if _failed:
 		quit(1)

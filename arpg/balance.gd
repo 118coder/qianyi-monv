@@ -105,6 +105,27 @@ static func _normalize() -> void:
 		if it[id].has("tint") and it[id]["tint"] is Array:
 			var c: Array = it[id]["tint"]
 			it[id]["tint"] = Color(c[0], c[1], c[2])
+	var eq: Dictionary = data.get("equipment", {})
+	for id in eq:
+		for f in ["atk", "def", "hp", "price", "tier", "sp"]:
+			if eq[id].has(f):
+				eq[id][f] = int(eq[id][f])
+	var sk: Dictionary = data.get("skills", {})
+	for id in sk:
+		for f in ["sp", "cd", "unlock_level", "dmg_mult", "heal"]:
+			if sk[id].has(f):
+				sk[id][f] = sk[id][f]
+		sk[id]["sp"] = int(sk[id].get("sp", 18))
+		sk[id]["cd"] = float(sk[id].get("cd", 3.0))
+		sk[id]["unlock_level"] = int(sk[id].get("unlock_level", 1))
+	var q: Dictionary = data.get("quests", {})
+	for id in q:
+		q[id]["count"] = int(q[id].get("count", 1))
+		var rw: Dictionary = q[id].get("rewards", {})
+		if rw.has("gold"):
+			rw["gold"] = int(rw["gold"])
+		if rw.has("xp"):
+			rw["xp"] = int(rw["xp"])
 	var et: Array = data.get("elite_tint", [1.3, 1.15, 0.5])
 	data["elite_tint"] = [et[0], et[1], et[2]]
 	_apply()
@@ -204,7 +225,7 @@ static func defaults() -> Dictionary:
 			"ore": {"name": "铁矿", "kind": "goods", "value": 22, "tint": [0.68, 0.72, 0.82]},
 			"gems": {"name": "魔石", "kind": "goods", "value": 60, "tint": [0.45, 0.6, 1.0]},
 			"orb": {"name": "宝玉", "kind": "goods", "value": 120, "tint": [1.0, 0.75, 0.3]},
-			"potion": {"name": "回复药水", "kind": "use", "heal": 50, "tint": [1.0, 0.42, 0.48]},
+			"potion": {"name": "回复药水", "kind": "use", "heal": 50, "value": 25, "tint": [1.0, 0.42, 0.48]},
 		},
 		"apc_units": {
 			"mercenary": {"name": "佣兵·铁岩", "sprite": ["res://assets/chars/Actor1.png", 0, 0], "hp": 90, "sp": 40,
@@ -220,6 +241,32 @@ static func defaults() -> Dictionary:
 			"3": [["orc", 4], ["wolf", 3], ["fox", 2], ["imp", 2]],
 			"4": [["orc", 3], ["wolf", 3], ["fox", 3], ["knight", 2]],
 			"5": [["knight", 3], ["fox", 3], ["orc", 2], ["wolf", 2]],
+		},
+		"sell_ratio": 0.6,
+		"gold_drop_min": 2, "gold_drop_max": 6,
+		"equip_slots": ["weapon", "armor", "trinket"],
+		"skills": {
+			"slash_dash": {"name": "冲斩", "kind": "dash", "unlock_level": 1, "sp": 18, "cd": 2.2, "dmg_mult": 1.7, "desc": "向前突进，斩击路径上的敌人"},
+			"arrow_volley": {"name": "迅捷连射", "kind": "volley", "unlock_level": 1, "sp": 20, "cd": 2.8, "dmg_mult": 1.0, "desc": "向前方扇形射出 5 支箭"},
+			"flame_nova": {"name": "烈焰环", "kind": "nova", "unlock_level": 1, "sp": 26, "cd": 3.5, "dmg_mult": 1.4, "desc": "爆发火焰环，环射 12 枚火球"},
+			"holy_light": {"name": "圣光术", "kind": "heal", "unlock_level": 3, "sp": 20, "cd": 5.0, "heal": 0.35, "desc": "回复 35% 最大生命"},
+			"piercing_shot": {"name": "穿透箭", "kind": "volley", "unlock_level": 5, "sp": 24, "cd": 3.0, "dmg_mult": 1.5, "desc": "五连矢，更快更痛"},
+			"meteor": {"name": "陨星术", "kind": "nova", "unlock_level": 6, "sp": 32, "cd": 4.5, "dmg_mult": 1.8, "desc": "更强的爆炎与冲击"},
+		},
+		"char_skills": {"fencer": ["slash_dash", "piercing_shot"], "archer": ["arrow_volley", "holy_light"], "witch": ["flame_nova", "meteor"]},
+		"equipment": {
+			"sword_iron": {"name": "铁剑", "slot": "weapon", "atk": 3, "price": 60, "tier": 1},
+			"sword_flame": {"name": "焰纹剑", "slot": "weapon", "atk": 7, "price": 220, "tier": 2},
+			"armor_leather": {"name": "皮甲", "slot": "armor", "def": 2, "hp": 10, "price": 50, "tier": 1},
+			"armor_plate": {"name": "板甲", "slot": "armor", "def": 5, "hp": 25, "price": 200, "tier": 2},
+			"trinket_ring": {"name": "回响指环", "slot": "trinket", "sp": 20, "price": 120, "tier": 1},
+		},
+		"shop_stock": {"always": ["potion", "herb"], "tier2": ["sword_iron", "armor_leather", "trinket_ring"], "tier3": ["sword_flame", "armor_plate"]},
+		"quests": {
+			"q_hunt": {"name": "讨伐魔物", "desc": "击败 8 只任意魔物", "type": "kill", "target": "any", "count": 8, "rewards": {"gold": 40, "xp": 20}},
+			"q_boss": {"name": "魔王讨伐", "desc": "击败魔王巴洛尔", "type": "kill", "target": "boss", "count": 1, "rewards": {"gold": 200}},
+			"q_ore": {"name": "铁矿收集", "desc": "拾取 5 个铁矿", "type": "collect", "target": "ore", "count": 5, "rewards": {"gold": 30, "item": {"potion": 2}}},
+			"q_depth": {"name": "深入地牢", "desc": "到达地下 3 层", "type": "reach_floor", "count": 3, "rewards": {"gold": 60}},
 		},
 		"party": {
 			"max_party_size": 8, "start_friends": 2,

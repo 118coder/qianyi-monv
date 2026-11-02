@@ -277,11 +277,7 @@ func _stairs_dist(p: ArpgPlayer) -> float:
 
 
 func _potion_count() -> int:
-	var n := 0
-	for it in main.bag:
-		if it == "potion":
-			n += 1
-	return n
+	return main.rpg.inventory.count("potion")
 
 
 # ———————— 收官 ————————
@@ -292,8 +288,8 @@ func _finish() -> void:
 	var lv := 1
 	if is_instance_valid(main.player):
 		lv = main.player.level
-	print("[AUTOPLAY] 结算：击杀 %d · 到达地下 %d 层 · Lv %d · 背包 %d 件" % [
-		main.kills, main.floor_no, lv, main.bag.size()])
+	print("[AUTOPLAY] 结算：击杀 %d · 到达地下 %d 层 · Lv %d · 背包 %d 格" % [
+		main.kills, main.floor_no, lv, main.rpg.inventory.used()])
 	if main.kills >= 2 or main.floor_no >= 2:
 		print("[AUTOPLAY] PASS")
 		get_tree().quit(0)
