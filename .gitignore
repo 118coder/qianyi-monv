@@ -1,0 +1,8 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# 编辑器本体与本地临时文件
+Godot_v*.exe
+Godot_v*_console.exe
+*.tmp

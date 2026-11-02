@@ -1,0 +1,155 @@
+{
+  "events": [
+    {
+      "commands": [
+        {
+          "cmd": "dialogue",
+          "lines": [
+            "糟了，兽人比情报里的多……",
+            "不过没关系，伊伊大人的魔法可不是摆设！"
+          ],
+          "speaker": "witch"
+        },
+        {
+          "cmd": "dialogue",
+          "lines": [
+            "打头阵的活儿永远归我。……上吧！"
+          ],
+          "speaker": "sword"
+        }
+      ],
+      "condition": {},
+      "name": "开场对话",
+      "once": true,
+      "trigger": {
+        "phase": "player",
+        "turn": 1,
+        "type": "turn_start"
+      }
+    },
+    {
+      "commands": [
+        {
+          "cmd": "dialogue",
+          "lines": [
+            "远处传来了号角声——敌方增援到了！"
+          ],
+          "speaker": "narrator"
+        },
+        {
+          "cells": [
+            [
+              9,
+              2
+            ],
+            [
+              10,
+              2
+            ]
+          ],
+          "cmd": "spawn",
+          "tpl": "orc"
+        },
+        {
+          "cells": [
+            [
+              9,
+              11
+            ]
+          ],
+          "cmd": "spawn",
+          "tpl": "wolf"
+        }
+      ],
+      "condition": {},
+      "name": "第3回合敌方增援",
+      "once": true,
+      "trigger": {
+        "phase": "enemy",
+        "turn": 3,
+        "type": "turn_start"
+      }
+    }
+  ],
+  "height": 14,
+  "name": "草原遭遇战",
+  "placements": [
+    {
+      "cell": [
+        2,
+        7
+      ],
+      "tpl": "sword",
+      "uid": "sword_0"
+    },
+    {
+      "cell": [
+        2,
+        8
+      ],
+      "tpl": "witch",
+      "uid": "witch_1"
+    },
+    {
+      "cell": [
+        1,
+        8
+      ],
+      "tpl": "sister",
+      "uid": "sister_2"
+    },
+    {
+      "cell": [
+        13,
+        6
+      ],
+      "tpl": "orc",
+      "uid": "orc_3"
+    },
+    {
+      "cell": [
+        15,
+        5
+      ],
+      "tpl": "wolf",
+      "uid": "wolf_4"
+    },
+    {
+      "cell": [
+        14,
+        9
+      ],
+      "tpl": "orc",
+      "uid": "orc_5"
+    },
+    {
+      "cell": [
+        17,
+        7
+      ],
+      "tpl": "boss",
+      "uid": "boss_6"
+    }
+  ],
+  "rows": [
+    "MMGGGGGGGGGGGGGGMMGG",
+    "MMGGGGGGGGGGGGGGMMGG",
+    "GGFFFGGGGDGGMMGGGGGG",
+    "GGFFGGGGGDGGMMGFFFGG",
+    "GGGGGGFGGDFGGGGGFGGG",
+    "GFGGGGGGGDGFFFGGGGGG",
+    "GFGGGGGGGDGGFFGGGGGG",
+    "GGDDDDDDDDDDDDDDDDGF",
+    "GGGGGGGGGDGGGGGGGGGG",
+    "GGGGFFGGGDGGGFGWWWGG",
+    "GGGGFFFGGDGGGGWWWWGG",
+    "GGGGGGGFFDGGGGGWWWMM",
+    "MMGGGGGGFDGGGGGGGGMM",
+    "MMGGGGGGGGGGGGGGGGGG"
+  ],
+  "width": 20,
+  "win": {
+    "type": "rout",
+    "uid": ""
+  }
+}

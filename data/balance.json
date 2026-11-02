@@ -1,0 +1,475 @@
+{
+  "apc_units": {
+    "mercenary": {
+      "atk": 9,
+      "atk_range": 38.0,
+      "hp": 90,
+      "name": "佣兵·铁岩",
+      "sp": 40,
+      "spd": 145,
+      "sprite": [
+        "res://assets/chars/Actor1.png",
+        0,
+        0
+      ],
+      "weapon": "melee"
+    }
+  },
+  "bag_cap": 20,
+  "boss": {
+    "atk": 15,
+    "atk_range": 42.0,
+    "behavior": "boss",
+    "cool": 1.1,
+    "hp": 280,
+    "name": "魔王·巴洛尔",
+    "scale": 1.5,
+    "spd": 70,
+    "sprite": [
+      "res://assets/chars/Monster.png",
+      288,
+      192
+    ],
+    "windup": 0.5,
+    "xp": 90
+  },
+  "chars": {
+    "archer": {
+      "atk": 10,
+      "atk_cd": 0.4,
+      "atk_range": 0.0,
+      "growth": {
+        "atk": 2,
+        "hp": 10
+      },
+      "hp": 92,
+      "name": "弓手·凯",
+      "proj_spd": 430.0,
+      "skill": {
+        "cd": 2.8,
+        "desc": "向前方扇形射出 5 支箭",
+        "name": "迅捷连射",
+        "sp": 20
+      },
+      "sp": 60,
+      "spd": 178,
+      "sprite": [
+        "res://assets/chars/Actor1.png",
+        432,
+        0
+      ],
+      "title": "操作型 · 远程风筝",
+      "weapon": "ranged"
+    },
+    "fencer": {
+      "atk": 12,
+      "atk_cd": 0.34,
+      "atk_range": 38.0,
+      "growth": {
+        "atk": 2,
+        "hp": 14
+      },
+      "hp": 120,
+      "name": "剑士·凛",
+      "skill": {
+        "cd": 2.2,
+        "desc": "向前突进，斩击路径上的敌人",
+        "name": "冲斩",
+        "sp": 18
+      },
+      "sp": 50,
+      "spd": 155,
+      "sprite": [
+        "res://assets/chars/Actor1.png",
+        288,
+        0
+      ],
+      "title": "稳健型 · 近战连段",
+      "weapon": "melee"
+    },
+    "witch": {
+      "atk": 14,
+      "atk_cd": 0.5,
+      "atk_range": 0.0,
+      "growth": {
+        "atk": 2,
+        "hp": 8
+      },
+      "hp": 80,
+      "name": "魔女·伊伊",
+      "proj_spd": 300.0,
+      "skill": {
+        "cd": 3.5,
+        "desc": "爆发火焰环，环射 12 枚火球并震退近身敌人",
+        "name": "烈焰环",
+        "sp": 26
+      },
+      "sp": 95,
+      "spd": 142,
+      "sprite": [
+        "res://assets/chars/Actor1.png",
+        144,
+        192
+      ],
+      "title": "爆发型 · 范围法术",
+      "weapon": "magic"
+    }
+  },
+  "death_loss": 0.5,
+  "drop_base": [
+    [
+      "herb",
+      5
+    ],
+    [
+      "ore",
+      3
+    ],
+    [
+      "potion",
+      2
+    ]
+  ],
+  "drop_f2_add": [
+    [
+      "gems",
+      1
+    ]
+  ],
+  "drop_f4_add": [
+    [
+      "orb",
+      1
+    ]
+  ],
+  "elite_chance": 0.12,
+  "elite_tint": [
+    1.3,
+    1.15,
+    0.5
+  ],
+  "enemies": {
+    "fox": {
+      "atk": 9,
+      "atk_range": 230.0,
+      "behavior": "ranged",
+      "cool": 1.8,
+      "hp": 26,
+      "keep": 150.0,
+      "name": "妖狐法师",
+      "proj_spd": 260.0,
+      "scale": 1.0,
+      "spd": 68,
+      "sprite": [
+        "res://assets/chars/Monster.png",
+        0,
+        192
+      ],
+      "windup": 0.6,
+      "xp": 10
+    },
+    "harpy": {
+      "atk": 8,
+      "atk_range": 28.0,
+      "behavior": "melee",
+      "cool": 1.0,
+      "hp": 26,
+      "name": "鹰身女妖",
+      "scale": 1.0,
+      "spd": 115,
+      "sprite": [
+        "res://assets/chars/Monster.png",
+        0,
+        0
+      ],
+      "windup": 0.4,
+      "xp": 6
+    },
+    "imp": {
+      "atk": 6,
+      "atk_range": 26.0,
+      "behavior": "melee",
+      "cool": 0.9,
+      "hp": 22,
+      "name": "魔物幼体",
+      "scale": 0.9,
+      "spd": 95,
+      "sprite": [
+        "res://assets/chars/Monster.png",
+        144,
+        192
+      ],
+      "windup": 0.35,
+      "xp": 4
+    },
+    "knight": {
+      "atk": 13,
+      "atk_range": 32.0,
+      "behavior": "melee",
+      "cool": 1.4,
+      "hp": 70,
+      "name": "黑铁骑士",
+      "scale": 1.1,
+      "spd": 62,
+      "sprite": [
+        "res://assets/chars/Monster.png",
+        432,
+        0
+      ],
+      "windup": 0.55,
+      "xp": 14
+    },
+    "orc": {
+      "atk": 11,
+      "atk_range": 30.0,
+      "behavior": "melee",
+      "cool": 1.2,
+      "hp": 44,
+      "name": "兽人",
+      "scale": 1.05,
+      "spd": 72,
+      "sprite": [
+        "res://assets/chars/Monster.png",
+        144,
+        0
+      ],
+      "windup": 0.5,
+      "xp": 9
+    },
+    "wolf": {
+      "atk": 9,
+      "atk_range": 28.0,
+      "behavior": "melee",
+      "cool": 0.8,
+      "hp": 30,
+      "name": "座狼",
+      "scale": 1.0,
+      "spd": 140,
+      "sprite": [
+        "res://assets/chars/Monster.png",
+        288,
+        0
+      ],
+      "windup": 0.3,
+      "xp": 8
+    }
+  },
+  "floor_enemy_count_base": 5,
+  "floor_enemy_count_per": 2,
+  "floor_pools": {
+    "1": [
+      [
+        "imp",
+        5
+      ],
+      [
+        "harpy",
+        3
+      ]
+    ],
+    "2": [
+      [
+        "imp",
+        3
+      ],
+      [
+        "harpy",
+        3
+      ],
+      [
+        "orc",
+        3
+      ],
+      [
+        "wolf",
+        2
+      ]
+    ],
+    "3": [
+      [
+        "orc",
+        4
+      ],
+      [
+        "wolf",
+        3
+      ],
+      [
+        "fox",
+        2
+      ],
+      [
+        "imp",
+        2
+      ]
+    ],
+    "4": [
+      [
+        "orc",
+        3
+      ],
+      [
+        "wolf",
+        3
+      ],
+      [
+        "fox",
+        3
+      ],
+      [
+        "knight",
+        2
+      ]
+    ],
+    "5": [
+      [
+        "knight",
+        3
+      ],
+      [
+        "fox",
+        3
+      ],
+      [
+        "orc",
+        2
+      ],
+      [
+        "wolf",
+        2
+      ]
+    ]
+  },
+  "items": {
+    "gems": {
+      "kind": "goods",
+      "name": "魔石",
+      "tint": [
+        0.45,
+        0.6,
+        1.0
+      ],
+      "value": 60
+    },
+    "herb": {
+      "kind": "goods",
+      "name": "药草",
+      "tint": [
+        0.45,
+        0.9,
+        0.55
+      ],
+      "value": 8
+    },
+    "orb": {
+      "kind": "goods",
+      "name": "宝玉",
+      "tint": [
+        1.0,
+        0.75,
+        0.3
+      ],
+      "value": 120
+    },
+    "ore": {
+      "kind": "goods",
+      "name": "铁矿",
+      "tint": [
+        0.68,
+        0.72,
+        0.82
+      ],
+      "value": 22
+    },
+    "potion": {
+      "heal": 50,
+      "kind": "use",
+      "name": "回复药水",
+      "tint": [
+        1.0,
+        0.42,
+        0.48
+      ]
+    }
+  },
+  "loot_base": [
+    [
+      "herb",
+      5
+    ],
+    [
+      "ore",
+      4
+    ],
+    [
+      "gems",
+      2
+    ],
+    [
+      "potion",
+      3
+    ]
+  ],
+  "loot_f2_add": [
+    [
+      "gems",
+      2
+    ]
+  ],
+  "loot_f3_add": [
+    [
+      "orb",
+      1
+    ]
+  ],
+  "max_floor": 5,
+  "party": {
+    "apc_tags": {
+      "mercenary": {
+        "can_command": true,
+        "can_possess": false,
+        "counts_to_cap": false,
+        "temporary": true
+      }
+    },
+    "command": {
+      "active": {
+        "leash_radius": 320.0,
+        "low_hp_retreat": 0.25,
+        "no_enemy": "follow",
+        "pickup": true,
+        "protect_player": true,
+        "search_radius": 340.0
+      },
+      "follow": {
+        "engage_radius": 300.0,
+        "engage_with_player": true,
+        "follow_distance": 110.0,
+        "pickup": true,
+        "spread": 52.0
+      },
+      "hold": {
+        "defense_radius": 70.0,
+        "pickup": false,
+        "self_defense": true
+      }
+    },
+    "far_think_multiplier": 3.0,
+    "far_unit_distance": 1200.0,
+    "friend_potion_use": false,
+    "friend_sp_regen": 3.0,
+    "low_hp_retreat_ratio": 0.25,
+    "max_party_size": 8,
+    "nav_repath_interval": 0.8,
+    "possession_cooldown": 1.5,
+    "revive_on_floor_change": true,
+    "revive_ratio": 0.5,
+    "start_friends": 2,
+    "stuck_teleport_after": 6.0,
+    "think_interval": 0.15,
+    "xp_share_ratio": 1.0
+  },
+  "trap_chance": 0.45,
+  "xp_base": 18,
+  "xp_per_level": 14
+}
