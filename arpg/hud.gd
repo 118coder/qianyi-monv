@@ -59,6 +59,77 @@ var toast_label: Label
 
 var _logs := []
 
+# ———————— 设计 token（Operate 模式：克制度为底线，语义色统一） ————————
+const C_SURFACE := Color(0.07, 0.09, 0.15, 0.94)
+const C_SURFACE2 := Color(0.11, 0.13, 0.21, 0.94)
+const C_BTN := Color(0.17, 0.20, 0.30)
+const C_BTN_HOVER := Color(0.24, 0.28, 0.41)
+const C_BTN_PRESS := Color(0.13, 0.15, 0.23)
+const C_ACCENT := Color(1.0, 0.84, 0.38)
+const C_TEXT := Color(0.94, 0.95, 1.0)
+const C_TEXT_DIM := Color(0.72, 0.77, 0.88)
+const C_DANGER := Color(0.92, 0.38, 0.32)
+const C_SUCCESS := Color(0.5, 0.9, 0.6)
+const C_BORDER := Color(1, 1, 1, 0.07)
+
+
+func _style_box(bg: Color, radius: int = 8, border: bool = false) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.set_corner_radius_all(radius)
+	if border:
+		sb.set_border_width_all(1)
+		sb.border_color = C_BORDER
+	return sb
+
+
+## 统一按钮工厂：kind = ghost（次要）/ primary（主操作·金）/ danger
+func _btn(text: String, cb: Callable, kind: String = "ghost") -> Button:
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_ALL
+	var normal := _style_box(C_ACCENT if kind == "primary" else (Color(0.32, 0.14, 0.12) if kind == "danger" else C_BTN), 6)
+	var hover := _style_box(C_ACCENT.lightened(0.08) if kind == "primary" else (Color(0.4, 0.18, 0.16) if kind == "danger" else C_BTN_HOVER), 6)
+	var press := _style_box(C_BTN_PRESS if kind == "ghost" else C_ACCENT.darkened(0.15), 6)
+	var focus := _style_box(Color(0, 0, 0, 0), 6)
+	focus.set_border_width_all(2)
+	focus.border_color = C_ACCENT
+	b.add_theme_stylebox_override("normal", normal)
+	b.add_theme_stylebox_override("hover", hover)
+	b.add_theme_stylebox_override("pressed", press)
+	b.add_theme_stylebox_override("focus", focus)
+	var fc := Color(0.1, 0.09, 0.06) if kind == "primary" else C_TEXT
+	b.add_theme_color_override("font_color", fc)
+	b.add_theme_color_override("font_hover_color", fc)
+	b.add_theme_color_override("font_pressed_color", fc)
+	b.add_theme_color_override("font_focus_color", fc)
+	b.add_theme_font_size_override("font_size", 14)
+	b.pressed.connect(cb)
+	return b
+
+
+## 页签按钮：选中态 = 金色底边（下划线语义）
+func _tab_btn(text: String, is_on: bool) -> Button:
+	var b := _btn(text, func(): pass)
+	b.toggle_mode = true
+	b.button_pressed = is_on
+	var on := _style_box(C_SURFACE2, 6)
+	on.border_width_bottom = 3
+	on.border_color = C_ACCENT
+	b.add_theme_stylebox_override("pressed", on)
+	b.add_theme_color_override("font_pressed_color", C_ACCENT)
+	return b
+
+
+func _first_button(node: Node) -> Button:
+	if node is Button:
+		return node
+	for c in node.get_children():
+		var r := _first_button(c)
+		if r != null:
+			return r
+	return null
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -98,7 +169,7 @@ func _build_toast() -> void:
 
 
 func set_quest_toast(text: String) -> void:
-	toast_label.text = "✦ 任务完成：%s" % text
+	toast_label.text = "任务完成：%s" % text
 	toast_label.visible = true
 	var tw := create_tween()
 	tw.tween_interval(2.5)
@@ -136,16 +207,13 @@ func _build_menu_ui() -> void:
 	tabs.add_theme_constant_override("separation", 6)
 	v.add_child(tabs)
 	for tname in ["状态", "背包", "技能", "任务", "系统"]:
-		var b := Button.new()
-		b.text = tname
-		b.toggle_mode = true
-		b.button_pressed = tname == "状态"
+		var b := _tab_btn(tname, tname == "状态")
 		b.pressed.connect(_switch_menu_tab.bind(tname))
 		tabs.add_child(b)
 		menu_tabs[tname] = b
 	menu_content = VBoxContainer.new()
 	menu_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	menu_content.add_theme_constant_override("separation", 4)
+	menu_content.add_theme_constant_override("separation", 6)
 	v.add_child(menu_content)
 	var hint := _label(12, Color(1, 1, 1, 0.55), "C / Esc 关闭 · 菜单打开时游戏暂停")
 	v.add_child(hint)
@@ -195,14 +263,16 @@ func refresh_shop() -> void:
 	if shop_tab == "buy":
 		for iid in game.shop.stock():
 			var price: int = game.shop.price_of(iid)
-			shop_list.add_child(_menu_row("%s —— %dG" % [game.shop.name_of(iid), price],
+			var can: bool = rpg.gold >= price
+			var row := _menu_row("%s —— %dG" % [game.shop.name_of(iid), price],
 				[["购买", func():
-					game.shop.buy(iid)
-					refresh_shop()]]))
+					var err: String = game.shop.buy(iid)
+					refresh_shop()]], C_TEXT if can else C_TEXT_DIM)
+			shop_list.add_child(row)
 	else:
 		var rows: Array = rpg.inventory.rows()
 		if rows.is_empty():
-			shop_list.add_child(_label(13, Color(1, 1, 1, 0.5), "（背包空空如也）"))
+			shop_list.add_child(_label(13, C_TEXT_DIM, "（背包空空如也 · 去地牢捡点战利品）"))
 		for i in rows.size():
 			var r: Dictionary = rows[i]
 			var gain: int = maxi(1, int(round(int(r["value"]) * float(ArpgBalance.data.get("sell_ratio", 0.6))))) * int(r["count"])
@@ -212,17 +282,14 @@ func refresh_shop() -> void:
 					refresh_shop()]]))
 
 
-func _menu_row(text: String, btn_defs: Array = []) -> Control:
+func _menu_row(text: String, btn_defs: Array = [], row_color: Color = Color.WHITE) -> Control:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 8)
-	var l := _label(14, Color.WHITE, text)
+	var l := _label(14, row_color, text)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(l)
 	for bd in btn_defs:
-		var b := Button.new()
-		b.text = bd[0]
-		b.pressed.connect(bd[1])
-		h.add_child(b)
+		h.add_child(_btn(str(bd[0]), bd[1]))
 	return h
 
 
@@ -252,13 +319,16 @@ func _page_bag() -> void:
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.custom_minimum_size = Vector2(0, 230)
+	var sbg := _style_box(Color(0, 0, 0, 0.25), 8, true)
+	scroll.add_theme_stylebox_override("panel", sbg)
 	menu_content.add_child(scroll)
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 4)
 	scroll.add_child(v)
 	var rows: Array = rpg.inventory.rows()
 	if rows.is_empty():
-		v.add_child(_label(13, Color(1, 1, 1, 0.5), "（空空如也）"))
+		v.add_child(_label(13, C_TEXT_DIM, "（空空如也 · 去地牢捡点战利品）"))
 	for i in rows.size():
 		var r: Dictionary = rows[i]
 		var btns := []
@@ -287,20 +357,20 @@ func _page_skills() -> void:
 func _page_quests() -> void:
 	var quests = _menu_ctx["quests"]
 	for r in quests.rows():
-		var col := Color(0.6, 0.95, 0.6) if r["state"] == "done" else (Color(0.55, 0.55, 0.6) if r["state"] == "claimed" else Color.WHITE)
+		var col := C_SUCCESS if r["state"] == "done" else (C_TEXT_DIM if r["state"] == "claimed" else Color.WHITE)
 		var prog: String = ("（%d/%d）" % [r["progress"], r["count"]]) if r["state"] == "active" else ""
-		menu_content.add_child(_menu_row("【%s】%s %s" % [r["state"], r["name"], prog]))
-		menu_content.add_child(_label(12, Color(1, 1, 1, 0.65), "    %s    奖励：%s" % [r["desc"], str(r["rewards"])]))
+		var st_name: String = {"active": "进行中", "done": "已完成", "claimed": "已领取"}.get(r["state"], str(r["state"]))
+		menu_content.add_child(_menu_row("%s · %s %s" % [st_name, r["name"], prog], [], col))
+		menu_content.add_child(_label(12, C_TEXT_DIM, "    %s    奖励：%s" % [r["desc"], str(r["rewards"])]))
 		if r["state"] == "done":
 			menu_content.add_child(_menu_row("", [["领取奖励", func(): _menu_claim(str(r["id"]))]]))
 		menu_content.add_child(HSeparator.new())
 
 
 func _page_sys() -> void:
-	menu_content.add_child(_menu_row("", [["保存存档 (F9)", func():
+	menu_content.add_child(_menu_row("保存 / 读取（快捷键 F9 / F10）", [["保存", func():
 		_menu_ctx["save_sys"].save_game()
-		refresh_menu_ui()]]))
-	menu_content.add_child(_menu_row("", [["读取存档 (F10)", func():
+		refresh_menu_ui()], ["读取", func():
 		hide_menu_ui()
 		_menu_ctx["save_sys"].load_game()]]))
 	menu_content.add_child(_menu_row("", [["回到标题", func():
@@ -348,6 +418,9 @@ func show_menu_ui(snap: Dictionary) -> void:
 	menu_root.visible = true
 	_menu_ctx = snap
 	refresh_menu_ui()
+	var fb := _first_button(menu_header.get_parent())
+	if fb != null:
+		fb.grab_focus()
 
 
 func hide_menu_ui() -> void:
@@ -376,46 +449,52 @@ func _build_shop_ui() -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	panel.add_child(v)
-	shop_gold = _label(20, Color(1, 0.85, 0.35))
+	shop_gold = _label(20, C_ACCENT)
 	v.add_child(shop_gold)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 6)
 	v.add_child(tabs)
 	for pair in [["买入", "buy"], ["卖出", "sell"]]:
-		var b := Button.new()
-		b.text = pair[0]
-		b.toggle_mode = true
-		b.button_pressed = pair[1] == "buy"
+		var b := _tab_btn(pair[0], pair[1] == "buy")
 		b.pressed.connect(func():
 			shop_tab = pair[1]
 			refresh_shop())
 		tabs.add_child(b)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_theme_stylebox_override("panel", _style_box(Color(0, 0, 0, 0.25), 8, true))
 	v.add_child(scroll)
 	shop_list = VBoxContainer.new()
 	shop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shop_list.add_theme_constant_override("separation", 4)
 	scroll.add_child(shop_list)
-	var close := Button.new()
-	close.text = "离开商店"
-	close.pressed.connect(func(): shop_root.visible = false)
-	v.add_child(close)
+	var close := _btn("离开商店 (Esc)", func(): shop_root.visible = false)
+	var ch := HBoxContainer.new()
+	ch.alignment = BoxContainer.ALIGNMENT_CENTER
+	ch.add_child(close)
+	v.add_child(ch)
 	shop_root.visible = false
 
 
 func show_shop() -> void:
 	shop_root.visible = true
 	refresh_shop()
+	var fb := _first_button(shop_list)
+	if fb != null:
+		fb.grab_focus()
 
 
 ## 队伍面板：可滚动，支持任意 N（需求书 §5.7）
 func _build_party_panel() -> void:
+	var party_panel := _panel_box()
+	party_panel.position = Vector2(12, 106)
+	party_panel.custom_minimum_size = Vector2(258, 0)
+	root.add_child(party_panel)
 	party_scroll = ScrollContainer.new()
-	party_scroll.position = Vector2(12, 108)
-	party_scroll.custom_minimum_size = Vector2(250, 100)
+	party_scroll.custom_minimum_size = Vector2(240, 96)
 	party_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	party_scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(party_scroll)
+	party_panel.add_child(party_scroll)
 	party_box = VBoxContainer.new()
 	party_box.add_theme_constant_override("separation", 1)
 	party_scroll.add_child(party_box)
@@ -501,10 +580,8 @@ func _bar(fill: Color, size: Vector2) -> ProgressBar:
 
 func _panel_box() -> PanelContainer:
 	var p := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.07, 0.12, 0.88)
-	sb.set_corner_radius_all(8)
-	sb.set_content_margin_all(12)
+	var sb := _style_box(C_SURFACE, 12, true)
+	sb.set_content_margin_all(16)
 	p.add_theme_stylebox_override("panel", sb)
 	return p
 
@@ -541,14 +618,16 @@ func _build_play_hud() -> void:
 	floor_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	play_hud.add_child(floor_label)
 
+	var top_right_panel := _panel_box()
+	top_right_panel.anchor_left = 1.0
+	top_right_panel.anchor_right = 1.0
+	top_right_panel.offset_left = -232
+	top_right_panel.offset_right = -8
+	top_right_panel.offset_top = 6
+	play_hud.add_child(top_right_panel)
 	var top_right := VBoxContainer.new()
-	top_right.anchor_left = 1.0
-	top_right.anchor_right = 1.0
-	top_right.offset_left = -220
-	top_right.offset_right = -12
-	top_right.offset_top = 10
-	top_right.add_theme_constant_override("separation", 2)
-	play_hud.add_child(top_right)
+	top_right.add_theme_constant_override("separation", 3)
+	top_right_panel.add_child(top_right)
 	bag_label = _label(14, Color(1, 1, 1))
 	bag_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top_right.add_child(bag_label)
@@ -732,10 +811,7 @@ func _char_card(id: String) -> Control:
 	skl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	skl.custom_minimum_size = Vector2(200, 0)
 	v.add_child(skl)
-	var btn := Button.new()
-	btn.text = "选择出击"
-	btn.pressed.connect(func(): start_selected.emit(id))
-	v.add_child(btn)
+	v.add_child(_btn("选择出击", func(): start_selected.emit(id), "primary"))
 	return panel
 
 
@@ -780,24 +856,15 @@ func _build_settle() -> void:
 	bh.alignment = BoxContainer.ALIGNMENT_CENTER
 	bh.add_theme_constant_override("separation", 12)
 	v.add_child(bh)
-	var btn := Button.new()
-	btn.text = "回到标题"
-	btn.pressed.connect(func(): back_to_title.emit())
-	bh.add_child(btn)
-	var btn3 := Button.new()
-	btn3.text = "进入店铺"
-	btn3.custom_minimum_size = Vector2(140, 0)
-	btn3.pressed.connect(func(): show_shop())
-	bh.add_child(btn3)
-	var btn4 := Button.new()
-	btn4.text = "一键卖出战利品"
-	btn4.custom_minimum_size = Vector2(160, 0)
-	btn4.pressed.connect(func():
-		var g: int = game.shop.sell_all_goods()
-		if g > 0:
-			settle_total.text = "已售出 +%dG（金币 %dG）" % [g, game.rpg.gold]
-	)
-	bh.add_child(btn4)
+	bh.add_child(_btn("回到标题", func(): back_to_title.emit()))
+	bh.add_child(_btn("进入店铺", func(): show_shop(), "primary"))
+	bh.add_child(_btn("一键卖出战利品", func(): _sell_loot_from_settle()))
+
+
+func _sell_loot_from_settle() -> void:
+	var g: int = game.shop.sell_all_goods()
+	if g > 0:
+		settle_total.text = "已售出 +%dG（金币 %dG）" % [g, game.rpg.gold]
 
 
 func show_settle(title: String, title_col: Color, stats: String, goods: String, total: int) -> void:
@@ -835,13 +902,9 @@ func _build_pause() -> void:
 	var tip := _label(14, Color(1, 1, 1, 0.7), "继续深入，还是见好就收？")
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(tip)
-	var b1 := Button.new()
-	b1.text = "继续探索"
-	b1.pressed.connect(func(): resume_requested.emit())
+	var b1 := _btn("继续探索", func(): resume_requested.emit(), "primary")
 	v.add_child(b1)
-	var b2 := Button.new()
-	b2.text = "撤退结算（带走全部战利品）"
-	b2.pressed.connect(func(): retreat_requested.emit())
+	var b2 := _btn("撤退结算（带走全部战利品）", func(): retreat_requested.emit())
 	v.add_child(b2)
 
 
