@@ -238,6 +238,27 @@ func _run() -> void:
 	_check(err == "", "读档无错误")
 	_check(main.rpg.gold == g_snap, "金币往返一致")
 
+	print("== 10. 基座（设置/音频/存档槽/校验/字符串） ==")
+	var mv: Variant = main.settings.get_value("master_vol")
+	main.settings.set_value("master_vol", 0.5)
+	_check(float(main.settings.get_value("master_vol")) == 0.5, "设置写入并持久化")
+	var bus_idx := AudioServer.get_bus_index("Master")
+	_check(bus_idx >= 0 and AudioServer.get_bus_volume_db(bus_idx) < -3.0, "总线音量即时应用")
+	main.settings.set_value("master_vol", mv)
+	_check(AudioServer.get_bus_index("Music") >= 0 and AudioServer.get_bus_index("SFX") >= 0, "Music/SFX 总线就绪")
+	main.audio.play_music("dungeon")
+	_check(main.audio._current_track == "dungeon", "BGM 按键切轨")
+	var errs: Array = ArpgBalance.validate()
+	_check(errs.is_empty(), "内容校验无错误 %s" % str(errs))
+	_check(L10n.text("ui.shop", "x") == "店铺（试营业）", "字符串表命中")
+	_check(L10n.text("ui.nonexistent_key", "兜底文案") == "兜底文案", "缺失键回退兜底")
+	var gold_saved: int = main.rpg.gold
+	_check(main.save_sys.save_game(2), "槽位 2 覆盖保存")
+	main.rpg.gold = 777
+	_check(main.save_sys.load_game(2) == "", "槽位 2 读取")
+	_check(main.rpg.gold == gold_saved, "槽位隔离数据一致（回滚到 %d）" % main.rpg.gold)
+	_check(main.save_sys.slot_meta(2).has("floor"), "槽位元信息齐全")
+
 	if _failed:
 		quit(1)
 	else:

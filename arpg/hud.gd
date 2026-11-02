@@ -368,11 +368,35 @@ func _page_quests() -> void:
 
 
 func _page_sys() -> void:
-	menu_content.add_child(_menu_row("保存 / 读取（快捷键 F9 / F10）", [["保存", func():
-		_menu_ctx["save_sys"].save_game()
-		refresh_menu_ui()], ["读取", func():
+	menu_content.add_child(_label(14, Color(1, 0.9, 0.6), "设置"))
+	for pair in [["主音量", "master_vol"], ["音乐", "music_vol"], ["音效", "sfx_vol"], ["震屏", "screen_shake"], ["手柄震动", "rumble"]]:
+		var key: String = pair[1]
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 8)
+		var l := _label(13, C_TEXT, pair[0])
+		l.custom_minimum_size = Vector2(90, 0)
+		h.add_child(l)
+		var slider := HSlider.new()
+		slider.min_value = 0.0
+		slider.max_value = 1.0
+		slider.step = 0.05
+		slider.value = float(_menu_ctx["settings"].get_value(key))
+		slider.custom_minimum_size = Vector2(180, 16)
+		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slider.value_changed.connect(func(v: float): _menu_ctx["settings"].set_value(key, v))
+		h.add_child(slider)
+		menu_content.add_child(h)
+	menu_content.add_child(HSeparator.new())
+	menu_content.add_child(_label(14, Color(1, 0.9, 0.6), "存档槽位"))
+	for slot in [1, 2, 3]:
+		var meta: Dictionary = _menu_ctx["save_sys"].slot_meta(slot)
+		var txt: String = "槽位 %d：（空）" % slot if meta.is_empty() else "槽位 %d：地下 %d 层 · Lv %d · %dG" % [slot, meta["floor"], meta["level"], meta["gold"]]
+		var btns := [["读取", func(): _menu_load_slot(slot)], ["覆盖保存", func(): _menu_ctx["save_sys"].save_game(slot); refresh_menu_ui()]]
+		menu_content.add_child(_menu_row(txt, btns))
+	menu_content.add_child(_menu_row("快捷键 F9 / F10 = 槽位 1", [["回到标题", func():
 		hide_menu_ui()
-		_menu_ctx["save_sys"].load_game()]]))
+		game._menu_close()
+		game._back_to_title()]]))
 	menu_content.add_child(_menu_row("", [["回到标题", func():
 		hide_menu_ui()
 		game._menu_close()
@@ -404,6 +428,13 @@ func _menu_drop(slot_idx: int) -> void:
 	if slot_idx < rows.size():
 		_menu_ctx["rpg"].inventory.remove(str(rows[slot_idx]["id"]), int(rows[slot_idx]["count"]))
 	refresh_menu_ui()
+
+
+func _menu_load_slot(slot: int) -> void:
+	hide_menu_ui()
+	var err: String = _menu_ctx["save_sys"].load_game(slot)
+	if err != "":
+		game.hud.log("读档失败：" + err)
 
 
 func _menu_claim(qid: String) -> void:

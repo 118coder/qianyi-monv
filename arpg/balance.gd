@@ -10,6 +10,7 @@ const PATH := "res://data/balance.json"
 static var data := {}
 static var loaded_ok := false
 static var last_error := ""
+static var last_errors: Array = []
 static var _mtime := 0
 
 # —— 供全游戏读取的静态表（reload 时整体替换，调用点即取即用）——
@@ -39,14 +40,16 @@ static func reload_data() -> bool:
 			push_warning("[BALANCE] " + last_error)
 		else:
 			last_error = ""
-		data = defaults()
+			data = defaults()
 		_apply()
+		last_errors = []
 		return false
 	data = _deep_merge(defaults(), raw)
 	_normalize()
 	_apply()
 	loaded_ok = true
 	last_error = ""
+	last_errors = validate()
 	return true
 
 
@@ -165,6 +168,45 @@ static func drop_weight(floor: int) -> Array:
 	return out
 
 
+## 内容校验（需求 §6：调参错误当场暴露，禁止静默回退）：返回错误清单
+static func validate() -> Array:
+	var errs := []
+	var chars: Dictionary = data.get("chars", {})
+	if chars.is_empty():
+		errs.append("chars 为空")
+	for id in chars:
+		for f in ["name", "sprite", "hp", "atk", "spd", "weapon"]:
+			if not chars[id].has(f):
+				errs.append("chars.%s 缺 %s" % [id, f])
+	for id in data.get("enemies", {}):
+		for f in ["name", "sprite", "hp", "atk", "spd", "xp", "behavior"]:
+			if not data["enemies"][id].has(f):
+				errs.append("enemies.%s 缺 %s" % [id, f])
+	if not data.has("boss"):
+		errs.append("boss 缺失")
+	if data.get("items", {}).is_empty():
+		errs.append("items 为空")
+	if not data.has("skills"):
+		errs.append("skills 缺失")
+	if not data.has("quests"):
+		errs.append("quests 缺失")
+	if not data.has("party"):
+		errs.append("party 配置缺失")
+	for fl in data.get("floor_pools", {}):
+		for e in data["floor_pools"][fl]:
+			if not data.get("enemies", {}).has(e[0]):
+				errs.append("floor_pools.%s 引用未知敌人 %s" % [fl, e[0]])
+	for c in data.get("char_skills", {}):
+		for sid in data["char_skills"][c]:
+			if not data.get("skills", {}).has(sid):
+				errs.append("char_skills.%s 引用未知技能 %s" % [c, sid])
+	var slots: Array = data.get("equip_slots", [])
+	for id in data.get("equipment", {}):
+		if not slots.has(data["equipment"][id].get("slot", "")):
+			errs.append("equipment.%s 槽位非法" % id)
+	return errs
+
+
 ## 按权重随机取一个 id
 static func weighted_pick(table: Array, rng: RandomNumberGenerator) -> String:
 	var total := 0
@@ -241,6 +283,15 @@ static func defaults() -> Dictionary:
 			"3": [["orc", 4], ["wolf", 3], ["fox", 2], ["imp", 2]],
 			"4": [["orc", 3], ["wolf", 3], ["fox", 3], ["knight", 2]],
 			"5": [["knight", 3], ["fox", 3], ["orc", 2], ["wolf", 2]],
+		},
+		"strings": {
+			"ui.title": "千亿魔女 · 地牢试炼",
+			"ui.start_game": "选择出击",
+			"ui.shop": "店铺（试营业）",
+			"ui.resume": "继续探索",
+			"ui.retreat": "撤退结算（带走全部战利品）",
+			"ui.save": "保存",
+			"ui.load": "读取",
 		},
 		"sell_ratio": 0.6,
 		"gold_drop_min": 2, "gold_drop_max": 6,

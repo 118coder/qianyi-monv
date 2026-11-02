@@ -67,6 +67,8 @@ var rpg: ArpgRpgState
 var quests: ArpgQuestManager
 var shop: ArpgShop
 var save_sys: ArpgSaveSystem
+var settings: ArpgSettings
+var audio: ArpgAudioManager
 var _menu_open := false
 
 # 热重载监视
@@ -125,6 +127,12 @@ func _ready() -> void:
 	shop.setup(self)
 	save_sys = ArpgSaveSystem.new()
 	save_sys.setup(self)
+	settings = ArpgSettings.new()
+	add_child(settings)
+	audio = ArpgAudioManager.new()
+	audio.setup(self)
+	add_child(audio)
+	audio.play_music("title")
 
 
 ## 用代码注册输入映射（免改 project.godot）：键盘 + Xbox/PS 手柄通用语义键位
@@ -219,8 +227,11 @@ func _setup_input() -> void:
 func rumble(weak: float, strong: float, dur: float) -> void:
 	if state != State.PLAY:
 		return
+	var scale := float(settings.get_value("rumble")) if settings != null else 1.0
+	if scale <= 0.001:
+		return
 	for d in Input.get_connected_joypads():
-		Input.start_joy_vibration(d, weak, strong, dur)
+		Input.start_joy_vibration(d, weak * scale, strong * scale, dur)
 
 
 # ———————— 开局 / 楼层 ————————
@@ -347,6 +358,7 @@ func build_floor() -> void:
 	hud.show_boss_bar(dungeon.boss_floor, 1.0, ArpgBalance.BOSS["name"] if dungeon.boss_floor else "")
 	hud.log("—— 地下 %d 层 ——" % floor_no)
 	quests.on_reach_floor(floor_no)
+	audio.play_music("boss" if dungeon.boss_floor else "dungeon")
 	_hud_static()
 
 
@@ -684,6 +696,7 @@ func on_mob_dead(i: int) -> void:
 		add_shake(0.72)
 		rumble(0.7, 1.0, 0.6)
 		hud.log("魔王倒下了！传送门出现在它倒下的地方——")
+		audio.play_music("town")
 		world.set_portal(world.mobs.pos[i])
 
 
@@ -797,6 +810,8 @@ func on_player_dead() -> void:
 
 func _back_to_title() -> void:
 	state = State.SELECT
+	if audio != null:
+		audio.play_music("title")
 	if is_instance_valid(world):
 		world.queue_free()
 	world = null
@@ -807,24 +822,12 @@ func _back_to_title() -> void:
 ## 震屏入口：v 为 trauma 强度 0~1（0.15 轻拍 / 0.35 受击 / 0.7 大事件）
 ## 震屏入口：v 为 trauma 强度 0~1（0.15 轻拍 / 0.35 受击 / 0.7 大事件）
 func add_shake(v: float) -> void:
-	trauma = clampf(trauma + v, 0.0, 1.0)
+	var scale := float(settings.get_value("screen_shake")) if settings != null else 1.0
+	trauma = clampf(trauma + v * scale, 0.0, 1.0)
 
 
-## 音频池：10 个复用播放器轮转 + 音源懒加载（首次播放才读盘）
 func play_sfx(sname: String, db: float = -6.0) -> void:
-	if _sfx_pool.is_empty():
-		for i in 10:
-			var pl := AudioStreamPlayer.new()
-			add_child(pl)
-			_sfx_pool.append(pl)
-	var p: AudioStreamPlayer = _sfx_pool[_sfx_i]
-	_sfx_i = (_sfx_i + 1) % _sfx_pool.size()
-	if not _sfx_cache.has(sname):
-		_sfx_cache[sname] = load(SFX[sname])
-	p.stop()
-	p.stream = _sfx_cache[sname]
-	p.volume_db = db
-	p.play()
+	audio.play_sfx(sname, db)
 
 
 func bag_full_warn() -> void:
