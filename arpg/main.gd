@@ -106,9 +106,10 @@ func _ready() -> void:
 		var bot := ArpgAutopilot.new()
 		bot.main = self
 		add_child(bot)
-	# 队友节点容器（挂 main 下：换层不销毁，y-sort 内部排序）
+	# 队友节点容器（挂 main 下：换层不销毁；z=5 保证在世界地板/敌群之上可见）
 	party_root = Node2D.new()
 	party_root.y_sort_enabled = true
+	party_root.z_index = 5
 	add_child(party_root)
 	# 热重载：balance.json 保存即生效；地图改动提示 F3
 	ArpgBalance.reload_data()

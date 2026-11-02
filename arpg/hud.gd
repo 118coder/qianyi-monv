@@ -605,8 +605,11 @@ func update_bars(player: ArpgPlayer, bag_n: int, potion_n: int, floor_no: int, b
 	lv_label.text = "Lv %d    攻 %d    HP %d/%d" % [player.level, player.atk, player.hp, player.max_hp]
 	floor_label.text = "地下 %d 层%s" % [floor_no, "　★ BOSS" if boss_floor else ""]
 	bag_label.text = "背包 %d/%d    药水×%d [Q]" % [bag_n, ArpgBalance.BAG_CAP, potion_n]
-	var sk: Dictionary = player.tpl["skill"]
-	skill_label.text = "技能 %s [K]  消耗SP%d  %s" % [sk["name"], sk["sp"], ("冷却中" if player.skill_cd > 0.0 else "就绪")]
+	var sks: Array = player.available_skills()
+	var sk: Dictionary = ArpgBalance.data.get("skills", {}).get(str(sks[0]) if sks.size() > 0 else "", {})
+	if sk.is_empty():
+		sk = player.tpl.get("skill", {})
+	skill_label.text = "技能 %s [K/L]  消耗SP%d  %s" % [sk.get("name", "?"), sk.get("sp", 0), ("冷却中" if player.skill_cd > 0.0 else "就绪")]
 
 
 func set_perf(fps: int, mob_n: int, proj_n: int, sim_ms: float) -> void:
