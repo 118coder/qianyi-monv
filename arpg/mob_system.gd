@@ -11,7 +11,7 @@ extends Node2D
 const MAX_MOBS := 12000
 const HASH_CELL := 64.0
 const THREAD_THRESHOLD := 300
-const AGGRO_RANGE := 185.0
+var _aggro := 185.0
 const TILE := ArpgData.TILE
 
 var main: Node
@@ -329,6 +329,7 @@ func refresh_targets() -> void:
 				targets.append(f.position if is_instance_valid(f) else Vector2(-9999, -9999))
 				al.append(0)
 	target_alive = al
+	_aggro = float(ArpgBalance.data.get("aggro_range", 185.0))
 	while tgt.size() < count:
 		tgt.append(0)
 	for i in count:
@@ -373,7 +374,7 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 		if flash_t[i] > 0.0:
 			flash_t[i] -= d
 		if not aggro[i]:
-			if dist < AGGRO_RANGE and target_alive[tgt[i]] == 1:
+			if dist < _aggro and target_alive[tgt[i]] == 1:
 				aggro[i] = 1
 			else:
 				_wander(i, d)

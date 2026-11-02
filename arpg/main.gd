@@ -61,6 +61,8 @@ var _friends_n := -1          # --friends=N 覆盖（-1 = 用配置默认）
 var _want_apc := false        # --apc 调试招募
 var _squad_cmd_i := 0
 var player_combat_t := 0.0
+var event_camera_lock := false   # 事件镜头调度时锁定跟随
+var flags := {}                  # 事件旗标（set_flag/if 共用）
 
 # RPG 元系统（背包/金币/装备/任务/商店/存档）
 var rpg: ArpgRpgState
@@ -398,6 +400,9 @@ func _process(delta: float) -> void:
 	_hot_reload_watch(delta)
 	if state != State.PLAY:
 		return
+	if event_camera_lock and camera != null:
+		camera.offset = camera.offset.lerp(Vector2.ZERO, 0.1)
+		return
 	# 相机跟随当前主控单位（切换时靠平滑过渡做镜头过场）
 	if camera != null and possession != null and possession.current_unit != null:
 		camera.position = possession.current_unit.position
@@ -733,6 +738,15 @@ func _manual_reload_balance() -> void:
 	if world != null and is_instance_valid(world) and world.mobs != null:
 		world.mobs.apply_balance()
 	hud.log("平衡数据已手动重载%s" % ("" if ok else "（解析失败，用内置默认）"))
+
+
+## 事件命令：镜头调度（事件期间锁定跟随，结束后平滑回归玩家）
+func event_camera_focus(pos: Vector2, dur: float) -> void:
+	event_camera_lock = true
+	var tw := create_tween()
+	tw.tween_property(camera, "position", pos, maxf(0.25, dur * 0.4)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	await get_tree().create_timer(maxf(0.3, dur)).timeout
+	event_camera_lock = false
 
 
 func _unhandled_input(event: InputEvent) -> void:

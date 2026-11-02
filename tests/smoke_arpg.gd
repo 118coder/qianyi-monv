@@ -259,6 +259,38 @@ func _run() -> void:
 	_check(main.rpg.gold == gold_saved, "槽位隔离数据一致（回滚到 %d）" % main.rpg.gold)
 	_check(main.save_sys.slot_meta(2).has("floor"), "槽位元信息齐全")
 
+	print("== 11. 节点式事件 / 镜头调度 / 状态机 ==")
+	main.flags.clear()
+	var nested: Array = [
+		{"cmd": "set_flag", "flag": "a", "value": true},
+		{"cmd": "if", "flag": "a", "equals": true, "then": [
+			{"cmd": "set_flag", "flag": "b", "value": true},
+			{"cmd": "if", "flag": "zzz", "equals": true, "then": [], "else": [
+				{"cmd": "set_flag", "flag": "c", "value": true}]},
+		], "else": [
+			{"cmd": "set_flag", "flag": "d", "value": true}]},
+	]
+	await main.events._run_commands(nested)
+	_check(bool(main.flags.get("b", false)), "嵌套 IF 是分支执行")
+	_check(bool(main.flags.get("c", false)), "嵌套 IF 否分支执行")
+	_check(not main.flags.has("d"), "未走的分支不执行")
+	var flat: Array = []
+	EditorAdvancedTabs.flatten(nested, 0, [], flat)
+	_check(flat.size() == 5, "画布铺平 %d 节点（含分支）" % flat.size())
+	var cam0: Vector2 = main.camera.position
+	await main.events._run_commands([{"cmd": "camera", "mode": "focus_cell", "cell": [2, 2], "dur": 0.3}])
+	_check(main.camera.position.distance_to(ArpgDungeon.cell_to_pos(Vector2i(2, 2))) < 300.0, "镜头调度命令生效")
+	await main.events._run_commands([{"cmd": "wait", "time": 0.2}, {"cmd": "give_gold", "amount": 33}])
+	_check(main.rpg.gold >= 33, "等待/给金币命令")
+	var hp00: int = int(ArpgBalance.ENEMIES["imp"]["hp"])
+	ArpgBalance.ENEMIES["imp"]["hp"] = hp00 + 10
+	main.world.mobs.apply_balance()
+	_check(int(ArpgBalance.ENEMIES["imp"]["hp"]) == hp00 + 10, "状态机参数热改生效")
+	ArpgBalance.ENEMIES["imp"]["hp"] = hp00
+	main.world.mobs.apply_balance()
+	_check(EditorAdvancedTabs.ai_states(ArpgBalance.ENEMIES["imp"]).size() == 4, "AI 状态图节点")
+	_check(EditorAdvancedTabs.ai_states(ArpgBalance.BOSS).size() == 5, "Boss 状态图节点")
+
 	if _failed:
 		quit(1)
 	else:

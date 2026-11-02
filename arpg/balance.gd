@@ -207,6 +207,17 @@ static func validate() -> Array:
 	return errs
 
 
+## 写回 balance.json（编辑器-系统数值页使用；保存即热重载）
+static func save_to_file() -> bool:
+	DirAccess.make_dir_recursive_absolute(PATH.get_base_dir())
+	var f := FileAccess.open(PATH, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(data, "  "))
+	f.close()
+	return true
+
+
 ## 按权重随机取一个 id
 static func weighted_pick(table: Array, rng: RandomNumberGenerator) -> String:
 	var total := 0
@@ -223,7 +234,7 @@ static func weighted_pick(table: Array, rng: RandomNumberGenerator) -> String:
 ## 内置默认（= balance.json 的初始内容；JSON 缺失/坏键时兜底）
 static func defaults() -> Dictionary:
 	return {
-		"max_floor": 5, "bag_cap": 20, "trap_chance": 0.45,
+		"max_floor": 5, "bag_cap": 20, "trap_chance": 0.45, "aggro_range": 185.0,
 		"elite_chance": 0.12, "death_loss": 0.5,
 		"elite_tint": [1.3, 1.15, 0.5],
 		"xp_base": 18, "xp_per_level": 14,

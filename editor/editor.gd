@@ -38,7 +38,13 @@ var status: Label
 var pages := {}
 var terrain_buttons := {}
 var event_list_box: VBoxContainer
-var event_form_box: VBoxContainer
+var event_canvas
+var event_props: VBoxContainer
+var _sel_path: Array = []      # 选中节点在命令树中的路径（[] = 触发器）
+var ai_tpl := "imp"
+var ai_canvas
+var ai_params: VBoxContainer
+var sys_grid: GridContainer
 var map_name_edit: LineEdit
 var w_spin: SpinBox
 var h_spin: SpinBox
@@ -106,6 +112,7 @@ func apply_dict(d: Dictionary) -> void:
 		events.append(ev)
 	win_cond = d.get("win", {"type": "rout", "uid": ""})
 	editing_event = -1
+	_sel_path = []
 	dragging_unit = -1
 
 
@@ -169,7 +176,7 @@ func _build_ui() -> void:
 	title.add_theme_color_override("font_color", Color(1, 0.95, 0.8))
 	top.add_child(title)
 	var group := ButtonGroup.new()
-	for pname in ["地形", "单位", "事件", "地图"]:
+	for pname in ["地形", "单位", "事件", "AI 状态机", "系统数值", "地图"]:
 		var b := Button.new()
 		b.text = pname
 		b.toggle_mode = true
@@ -287,6 +294,7 @@ func _make_unit_page() -> Control:
 
 func _make_event_page() -> Control:
 	var v := _page_box("事件")
+	v.custom_minimum_size = Vector2(560, 0)
 	var top := HBoxContainer.new()
 	v.add_child(top)
 	var add_btn := Button.new()
@@ -297,14 +305,37 @@ func _make_event_page() -> Control:
 	del_btn.text = "删除选中"
 	del_btn.pressed.connect(_delete_event)
 	top.add_child(del_btn)
+	top.add_child(ed_event_note())
 	event_list_box = VBoxContainer.new()
 	event_list_box.add_theme_constant_override("separation", 4)
 	v.add_child(event_list_box)
 	v.add_child(HSeparator.new())
-	event_form_box = VBoxContainer.new()
-	event_form_box.add_theme_constant_override("separation", 6)
-	v.add_child(event_form_box)
+	# 节点画布（流程可视化）+ 属性面板（选中节点的字段）
+	var flow := VBoxContainer.new()
+	flow.add_theme_constant_override("separation", 6)
+	v.add_child(flow)
+	var cscroll := ScrollContainer.new()
+	cscroll.custom_minimum_size = Vector2(520, 240)
+	cscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	flow.add_child(cscroll)
+	event_canvas = EditorAdvancedTabs.EventCanvas.new()
+	event_canvas.ed = self
+	cscroll.add_child(event_canvas)
+	var pscroll := ScrollContainer.new()
+	pscroll.custom_minimum_size = Vector2(520, 240)
+	pscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	flow.add_child(pscroll)
+	event_props = VBoxContainer.new()
+	event_props.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	event_props.add_theme_constant_override("separation", 6)
+	pscroll.add_child(event_props)
 	return v
+
+
+func ed_event_note() -> Control:
+	var l := _lbl("点节点→右侧改属性；「是/否」= 条件分支")
+	l.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
+	return l
 
 
 func _make_map_page() -> Control:
@@ -380,8 +411,10 @@ func _switch_page(pname: String) -> void:
 func _refresh_all() -> void:
 	_refresh_terrain_buttons()
 	_refresh_event_list()
-	_rebuild_event_form()
+	refresh_event_canvas()
 	_refresh_map_page()
+	EditorAdvancedTabs.refresh_ai_page(self)
+	EditorAdvancedTabs.refresh_systems(self)
 	if canvas != null:
 		canvas.queue_redraw()
 
@@ -421,8 +454,9 @@ func _add_event() -> void:
 		"once": true, "condition": {}, "commands": [],
 	})
 	editing_event = events.size() - 1
+	_sel_path = []
 	_refresh_event_list()
-	_rebuild_event_form()
+	refresh_event_canvas()
 
 
 func _delete_event() -> void:
@@ -430,8 +464,9 @@ func _delete_event() -> void:
 		return
 	events.remove_at(editing_event)
 	editing_event = -1
+	_sel_path = []
 	_refresh_event_list()
-	_rebuild_event_form()
+	refresh_event_canvas()
 
 
 func _refresh_event_list() -> void:
@@ -449,8 +484,16 @@ func _refresh_event_list() -> void:
 
 func _select_event(i: int) -> void:
 	editing_event = i
+	_sel_path = []
 	_refresh_event_list()
-	_rebuild_event_form()
+	refresh_event_canvas()
+
+
+func refresh_event_canvas() -> void:
+	if event_canvas != null:
+		event_canvas.custom_minimum_size = Vector2.ZERO
+		event_canvas.queue_redraw()
+	EditorAdvancedTabs.build_event_props(self)
 
 
 func _trigger_desc(ev: Dictionary) -> String:
@@ -469,259 +512,6 @@ func _trigger_desc(ev: Dictionary) -> String:
 func _phase_name(ph: String) -> String:
 	return {"player": "玩家", "enemy": "敌方", "any": "任意"}.get(ph, ph)
 
-
-func _rebuild_event_form() -> void:
-	for c in event_form_box.get_children():
-		c.queue_free()
-	if editing_event < 0 or editing_event >= events.size():
-		var tip := _lbl("← 选择或新建一个事件")
-		tip.add_theme_color_override("font_color", Color(1, 1, 1, 0.5))
-		event_form_box.add_child(tip)
-		return
-	var ev: Dictionary = events[editing_event]
-
-	# 名称
-	var nrow := HBoxContainer.new()
-	event_form_box.add_child(nrow)
-	nrow.add_child(_lbl("名称"))
-	var name_edit := LineEdit.new()
-	name_edit.text = str(ev.get("name", ""))
-	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_edit.text_changed.connect(func(s):
-		ev["name"] = s
-		_refresh_event_list())
-	nrow.add_child(name_edit)
-
-	# 触发器类型
-	var trig: Dictionary = ev["trigger"]
-	var trow := HBoxContainer.new()
-	event_form_box.add_child(trow)
-	trow.add_child(_lbl("触发"))
-	var type_opt := OptionButton.new()
-	type_opt.add_item("回合开始")
-	type_opt.add_item("单位死亡")
-	type_opt.add_item("进入区域")
-	var ti := ["turn_start", "unit_death", "zone"].find(str(trig.get("type", "turn_start")))
-	type_opt.select(maxi(ti, 0))
-	type_opt.item_selected.connect(func(i):
-		trig["type"] = ["turn_start", "unit_death", "zone"][i]
-		_rebuild_event_form())
-	trow.add_child(type_opt)
-
-	# 各类型参数
-	match str(trig.get("type", "turn_start")):
-		"turn_start":
-			var prow := HBoxContainer.new()
-			event_form_box.add_child(prow)
-			prow.add_child(_lbl("第"))
-			var spin := SpinBox.new()
-			spin.min_value = 1
-			spin.max_value = 99
-			spin.custom_minimum_size = Vector2(64, 0)
-			spin.value = int(trig.get("turn", 1))
-			spin.value_changed.connect(func(val): trig["turn"] = int(val))
-			prow.add_child(spin)
-			prow.add_child(_lbl("回合 ·"))
-			var ph := OptionButton.new()
-			ph.add_item("玩家回合")
-			ph.add_item("敌方回合")
-			ph.add_item("任意")
-			ph.select(["player", "enemy", "any"].find(str(trig.get("phase", "player"))))
-			ph.item_selected.connect(func(i): trig["phase"] = ["player", "enemy", "any"][i])
-			prow.add_child(ph)
-		"unit_death":
-			var prow := HBoxContainer.new()
-			event_form_box.add_child(prow)
-			prow.add_child(_lbl("单位"))
-			var uo := OptionButton.new()
-			uo.add_item("（任意单位）")
-			uo.set_item_metadata(0, "")
-			var sel := 0
-			for p in placements:
-				var nm: String = SrpgData.UNITS.get(p["tpl"], {}).get("name", p["tpl"])
-				uo.add_item("%s · %s" % [p["uid"], nm])
-				uo.set_item_metadata(uo.item_count - 1, p["uid"])
-				if p["uid"] == str(trig.get("unit", "")):
-					sel = uo.item_count - 1
-			uo.select(sel)
-			uo.item_selected.connect(func(i): trig["unit"] = uo.get_item_metadata(i))
-			prow.add_child(uo)
-		"zone":
-			var prow := HBoxContainer.new()
-			event_form_box.add_child(prow)
-			prow.add_child(_lbl("谁进入"))
-			var fo := OptionButton.new()
-			fo.add_item("我方")
-			fo.add_item("敌方")
-			fo.add_item("任意")
-			fo.select(["player", "enemy", "any"].find(str(trig.get("faction", "player"))))
-			fo.item_selected.connect(func(i): trig["faction"] = ["player", "enemy", "any"][i])
-			prow.add_child(fo)
-			prow.add_child(_lbl("区域 %s" % str(trig.get("rect", "未设置"))))
-			var pick := Button.new()
-			pick.text = "在画布上拖拽框选"
-			pick.pressed.connect(func():
-				cur_tool = EdTool.ZONE
-				zone_drag_start = Vector2i(-1, -1)
-				_update_status())
-			prow.add_child(pick)
-
-	# 只触发一次
-	var orow := HBoxContainer.new()
-	event_form_box.add_child(orow)
-	var once_cb := CheckBox.new()
-	once_cb.text = "只触发一次"
-	once_cb.button_pressed = bool(ev.get("once", true))
-	once_cb.toggled.connect(func(v): ev["once"] = v)
-	orow.add_child(once_cb)
-
-	# 旗标条件
-	var cond: Dictionary = ev["condition"]
-	var crow := HBoxContainer.new()
-	event_form_box.add_child(crow)
-	var cond_cb := CheckBox.new()
-	cond_cb.text = "旗标条件"
-	cond_cb.button_pressed = str(cond.get("flag", "")) != ""
-	crow.add_child(cond_cb)
-	var flag_edit := LineEdit.new()
-	flag_edit.placeholder_text = "旗标名"
-	flag_edit.text = str(cond.get("flag", ""))
-	flag_edit.text_changed.connect(func(s): cond["flag"] = s)
-	crow.add_child(flag_edit)
-	var eq_opt := OptionButton.new()
-	eq_opt.add_item("为真")
-	eq_opt.add_item("为假")
-	eq_opt.select(0 if bool(cond.get("equals", true)) else 1)
-	eq_opt.item_selected.connect(func(i): cond["equals"] = i == 0)
-	crow.add_child(eq_opt)
-	flag_edit.editable = cond_cb.button_pressed
-	eq_opt.disabled = not cond_cb.button_pressed
-	cond_cb.toggled.connect(func(v):
-		flag_edit.editable = v
-		eq_opt.disabled = not v
-		if v:
-			if str(cond.get("flag", "")) == "":
-				cond["flag"] = "flag_1"
-			flag_edit.text = str(cond.get("flag", ""))
-		else:
-			cond["flag"] = "")
-
-	# 命令列表
-	event_form_box.add_child(_lbl("命令（自上而下执行）"))
-	var cmds_box := VBoxContainer.new()
-	cmds_box.add_theme_constant_override("separation", 4)
-	event_form_box.add_child(cmds_box)
-	var cmds: Array = ev["commands"]
-	for ci in cmds.size():
-		cmds_box.add_child(_make_command_row(cmds, ci))
-	var add_row := HBoxContainer.new()
-	add_row.add_theme_constant_override("separation", 4)
-	event_form_box.add_child(add_row)
-	for pair in [["＋对话", "dialogue"], ["＋增援", "spawn"], ["＋旗标", "set_flag"], ["＋胜利", "win"], ["＋失败", "lose"]]:
-		var ab := Button.new()
-		ab.text = pair[0]
-		ab.pressed.connect(func():
-			cmds.append(_new_command(pair[1]))
-			_rebuild_event_form())
-		add_row.add_child(ab)
-
-
-func _new_command(cmd: String) -> Dictionary:
-	match cmd:
-		"dialogue":
-			return {"cmd": "dialogue", "speaker": "narrator", "lines": ["……"]}
-		"spawn":
-			return {"cmd": "spawn", "tpl": "orc", "cells": []}
-		"set_flag":
-			return {"cmd": "set_flag", "flag": "flag_1", "value": true}
-		"win":
-			return {"cmd": "win"}
-		"lose":
-			return {"cmd": "lose"}
-	return {}
-
-
-func _make_command_row(cmds: Array, ci: int) -> Control:
-	var c: Dictionary = cmds[ci]
-	var panel := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(1, 1, 1, 0.06)
-	sb.set_content_margin_all(6)
-	panel.add_theme_stylebox_override("panel", sb)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	panel.add_child(row)
-
-	var del := Button.new()
-	del.text = "×"
-	del.pressed.connect(func():
-		cmds.remove_at(ci)
-		_rebuild_event_form())
-	row.add_child(del)
-
-	match str(c.get("cmd", "")):
-		"dialogue":
-			row.add_child(_lbl("对话"))
-			var so := OptionButton.new()
-			so.add_item("旁白")
-			so.set_item_metadata(0, "narrator")
-			var sel := 0
-			for tpl_id in SrpgData.UNITS:
-				so.add_item(SrpgData.UNITS[tpl_id]["name"])
-				so.set_item_metadata(so.item_count - 1, tpl_id)
-				if tpl_id == str(c.get("speaker", "")):
-					sel = so.item_count - 1
-			so.select(sel)
-			so.item_selected.connect(func(i): c["speaker"] = so.get_item_metadata(i))
-			row.add_child(so)
-			var te := TextEdit.new()
-			te.text = "\n".join(c.get("lines", []))
-			te.custom_minimum_size = Vector2(170, 54)
-			te.text_changed.connect(func(): c["lines"] = te.text.split("\n"))
-			row.add_child(te)
-		"spawn":
-			row.add_child(_lbl("增援"))
-			var so := OptionButton.new()
-			for tpl_id in SrpgData.UNITS:
-				so.add_item(SrpgData.UNITS[tpl_id]["name"])
-				so.set_item_metadata(so.item_count - 1, tpl_id)
-				if tpl_id == str(c.get("tpl", "orc")):
-					so.select(so.item_count - 1)
-			so.item_selected.connect(func(i): c["tpl"] = so.get_item_metadata(i))
-			row.add_child(so)
-			row.add_child(_lbl("%d 格" % (c.get("cells", []) as Array).size()))
-			var pick := Button.new()
-			pick.text = "点选格子"
-			pick.pressed.connect(func():
-				editing_spawn_cmd = c
-				cur_tool = EdTool.SPAWN
-				_set_status("在画布上点击以增删增援出生格（橙色）"))
-			row.add_child(pick)
-		"set_flag":
-			row.add_child(_lbl("设旗标"))
-			var fe := LineEdit.new()
-			fe.text = str(c.get("flag", ""))
-			fe.placeholder_text = "旗标名"
-			fe.text_changed.connect(func(s): c["flag"] = s)
-			row.add_child(fe)
-			var vo := OptionButton.new()
-			vo.add_item("为真")
-			vo.add_item("为假")
-			vo.select(0 if bool(c.get("value", true)) else 1)
-			vo.item_selected.connect(func(i): c["value"] = i == 0)
-			row.add_child(vo)
-		"win":
-			var l := _lbl("★ 胜利")
-			l.add_theme_color_override("font_color", Color(0.5, 1, 0.6))
-			row.add_child(l)
-		"lose":
-			var l := _lbl("★ 失败")
-			l.add_theme_color_override("font_color", Color(1, 0.5, 0.45))
-			row.add_child(l)
-	return panel
-
-
-# ———————— 画布输入 ————————
 
 func canvas_input(cv: MapCanvas, ev: InputEvent) -> void:
 	if ev is InputEventMouseMotion:

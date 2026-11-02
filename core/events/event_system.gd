@@ -78,6 +78,7 @@ func _matches(ev: Dictionary, tname: String, ctx: Dictionary, idx: int) -> bool:
 	return true
 
 
+## 命令执行 v2（支持嵌套：if 分支内可包含任意命令，含再嵌套的 if）
 func _run_commands(cmds: Array) -> void:
 	for c in cmds:
 		match str(c.get("cmd", "")):
@@ -88,6 +89,48 @@ func _run_commands(cmds: Array) -> void:
 				await main.get_tree().create_timer(0.35).timeout
 			"set_flag":
 				main.flags[str(c.get("flag", ""))] = bool(c.get("value", true))
+			"if":
+				var want := bool(c.get("equals", true))
+				if bool(main.flags.get(str(c.get("flag", "")), false)) == want:
+					await _run_commands(c.get("then", []))
+				else:
+					await _run_commands(c.get("else", []))
+			"camera":
+				var mode := str(c.get("mode", "focus_cell"))
+				var cc: Array = c.get("cell", [0, 0])
+				var cpos: Vector2 = main.player.position if mode == "focus_player" else ArpgDungeon.cell_to_pos(Vector2i(int(cc[0]), int(cc[1])))
+				await main.event_camera_focus(cpos, float(c.get("dur", 1.5)))
+			"wait":
+				await main.get_tree().create_timer(maxf(0.05, float(c.get("time", 1.0)))).timeout
+			"fx":
+				var fx_kind := str(c.get("kind", "nova"))
+				var fc: Array = c.get("cell", [0, 0])
+				var fx_pos: Vector2 = main.player.position if str(c.get("at", "cell")) == "player" else ArpgDungeon.cell_to_pos(Vector2i(int(fc[0]), int(fc[1])))
+				match fx_kind:
+					"shake":
+						main.add_shake(0.5)
+					"spark":
+						main.world.spawn_hit_spark(fx_pos, Color(1, 0.9, 0.5))
+					"heal":
+						main.world.spawn_nova(fx_pos, Color(0.5, 1, 0.6))
+					_:
+						main.world.spawn_nova(fx_pos, Color(1.0, 0.55, 0.25))
+			"music":
+				main.audio.play_music(str(c.get("track", "dungeon")))
+			"give_gold":
+				var amount := int(c.get("amount", 10))
+				main.rpg.gold += amount
+				main.hud.log("获得 %dG（事件）" % amount)
+			"give_item":
+				var iid := str(c.get("tpl", "potion"))
+				var n := int(c.get("count", 1))
+				if main.rpg.inventory.add(iid, n):
+					main.quests.on_pickup(iid)
+					main.hud.log("事件给予 %s ×%d" % [ArpgBalance.ITEMS.get(iid, {}).get("name", iid), n])
+			"heal_full":
+				var u = main.possession.current_unit if main.possession.current_unit != null else main.player
+				u.heal_by(u.max_hp)
+				main.world.spawn_nova(u.position, Color(0.5, 1, 0.6))
 			"win":
 				main._game_over(true)
 				return
