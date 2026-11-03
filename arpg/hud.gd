@@ -8,6 +8,8 @@ signal back_to_title
 signal resume_requested
 signal retreat_requested
 
+const Minimap := preload("res://arpg/minimap.gd")
+
 var font: SystemFont
 var root: Control
 
@@ -19,6 +21,9 @@ var xp_bar: ProgressBar
 var lv_label: Label
 var floor_label: Label
 var bag_label: Label
+var gold_label: Label
+var _gold_tw: Tween
+var minimap: Minimap
 var skill_label: Label
 var perf_label: Label
 var log_label: Label
@@ -686,6 +691,9 @@ func _build_play_hud() -> void:
 	var top_right := VBoxContainer.new()
 	top_right.add_theme_constant_override("separation", 3)
 	top_right_panel.add_child(top_right)
+	gold_label = _label(15, Color(1, 0.86, 0.36))
+	gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	top_right.add_child(gold_label)
 	bag_label = _label(14, Color(1, 1, 1))
 	bag_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top_right.add_child(bag_label)
@@ -695,6 +703,11 @@ func _build_play_hud() -> void:
 	perf_label = _label(12, Color(0.6, 1.0, 0.75, 0.9))
 	perf_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top_right.add_child(perf_label)
+
+	# 小地图：右下角（左下是战斗日志、右上是数值面板，右下最干净）
+	minimap = Minimap.new()
+	play_hud.add_child(minimap)
+	minimap.bind_hud(self)
 
 	log_label = _label(13, Color(1, 1, 1, 0.85))
 	log_label.anchor_top = 1.0
@@ -733,6 +746,24 @@ func _build_play_hud() -> void:
 	boss_box.add_child(boss_name)
 	boss_bar = _bar(Color(0.85, 0.25, 0.2), Vector2(440, 12))
 	boss_box.add_child(boss_bar)
+
+
+## 金币显示：吃到掉落时闪一下（modulate 高亮再回落，不受容器布局影响）
+func pop_gold(v: int) -> void:
+	if gold_label == null:
+		return
+	gold_label.text = "%d G" % v
+	if _gold_tw != null and _gold_tw.is_valid():
+		_gold_tw.kill()
+	gold_label.modulate = Color(1.75, 1.5, 0.75)
+	_gold_tw = create_tween()
+	_gold_tw.tween_property(gold_label, "modulate", Color.WHITE, 0.30)
+
+
+## 静默刷新（商店买卖/读档后同步，不做高亮）
+func set_gold(v: int) -> void:
+	if gold_label != null:
+		gold_label.text = "%d G" % v
 
 
 func update_bars(player: ArpgPlayer, bag_n: int, potion_n: int, floor_no: int, boss_floor: bool) -> void:

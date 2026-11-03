@@ -1,0 +1,23 @@
+; qy_native.gdextension
+;
+; Godot 会扫描 res:// 下所有 .gdextension 文件并在启动时加载对应平台库。
+; 路径必须是 res:// 形式；导出时需要在导出预设里把这些 .dll 一起带上
+; （Godot 会把 gdextension 引用的库复制到可执行文件旁）。
+;
+; 库名格式：<name>.windows.<debug|release>.x86_64.dll —— 与 CMake 的输出名保持一致，
+; 否则会出现"编辑器能加载、导出后找不到库"的经典问题。
+
+[configuration]
+
+entry_symbol = "qy_library_init"
+compatibility_minimum = "4.4"
+reloadable = true
+
+[libraries]
+
+windows.debug.x86_64 = "res://native/bin/qy_native.windows.debug.x86_64.dll"
+windows.release.x86_64 = "res://native/bin/qy_native.windows.release.x86_64.dll"
+
+; 预留：Linux / macOS 交叉编译时按同样规则补
+; linux.debug.x86_64 = "res://native/bin/qy_native.linux.debug.x86_64.so"
+; macos.debug = "res://native/bin/qy_native.macos.debug.framework"

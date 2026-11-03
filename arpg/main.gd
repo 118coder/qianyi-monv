@@ -23,11 +23,69 @@ var over: bool:
 	get:
 		return state == State.SETTLE
 
+## 镜头：取景算法（rig）+ 调度（director）。用 preload 常量而非全局 class_name：
+## 新脚本未进 class cache 时也能引用（见 HANDOFF §6 坑 9）
+const CameraRig := preload("res://arpg/camera_rig.gd")
+const CameraDirector := preload("res://arpg/camera_director.gd")
+
 var hud: ArpgHUD
 var world: ArpgWorld
 var player: ArpgPlayer
 var dungeon: ArpgDungeon
-var camera: Camera2D
+var cam: CameraDirector         # 镜头调度器（镜头栈 + 兜底）
+var camera: CameraRig           # 取景算法层（= cam.rig；外部/测试读 camera.position）
+
+## ——— 可视化配置 ———
+## 这几个是「改一下勾选/数字就能跑」的旋钮，检查器里直接调，不用改代码。
+## 全部给的是"与原行为一致"的默认值，因此老存档/测试/命令行参数都不受影响。
+@export_group("场景")
+## 勾上后恢复 Node2D 的全部内置属性（位置/旋转/绘制等，调试用）
+## 变量名必须是 ASCII：它会被写进 .tscn，而场景文件的裸标识符只接受 ASCII。
+@export var show_raw_props := false:
+	set(v):
+		show_raw_props = v
+		notify_property_list_changed()
+
+@export_group("开局")
+## 起始层：调试时直接从第 N 层开始（1 = 正常流程）
+@export_range(1, 9) var start_floor := 1
+## 开局队友数量。-1 = 读 balance.json 的 party.start_friends（默认行为）
+@export_range(-1, 8) var start_friends := -1
+
+@export_group("地牢")
+## 地牢基准种子。0 = 每层随机（默认）；固定值 = 布局可复现（叠加层号，每层仍不同）
+## 填了固定值之后，「编辑器预览」节点会画出与游戏完全相同的布局。
+@export var dungeon_seed := 0:
+	set(v):
+		dungeon_seed = v
+		# 改种子立刻重绘预览，不用手动去找预览节点勾「换一张图」
+		var pv := get_node_or_null(NodePath("编辑器预览"))
+		if pv != null and pv.has_method("refresh"):
+			pv.refresh()
+
+## 检查器瘦身：根节点永远在世界原点、内容全在 world 里，所以 position/rotation/scale/
+## visibility/ordering/texture/material/process 这些内置属性对它没有意义。隐藏它们之后，
+## 右侧第一屏就是上面这些中文配置，而不是一长串英文。只去掉 EDITOR usage，运行时不受影响。
+const _HIDE_PROPS := [
+	"position", "rotation", "rotation_degrees", "scale", "skew", "transform",
+	"global_position", "global_rotation", "global_rotation_degrees",
+	"global_scale", "global_skew", "global_transform",
+	"visible", "modulate", "self_modulate", "show_behind_parent", "top_level",
+	"clip_children", "light_mask", "visibility_layer",
+	"z_index", "z_as_relative", "y_sort_enabled",
+	"texture_filter", "texture_repeat", "material", "use_parent_material",
+	"canvas_item_priority", "process_mode", "process_priority",
+	"process_physics_priority", "process_thread_group",
+	"physics_interpolation_mode", "auto_translate_mode", "editor_description",
+]
+
+
+func _validate_property(property: Dictionary) -> void:
+	if show_raw_props:
+		return
+	if str(property.name) in _HIDE_PROPS:
+		property.usage &= ~PROPERTY_USAGE_EDITOR
+
 
 var char_id := "fencer"
 var floor_no := 1
@@ -37,10 +95,10 @@ var _interact_target := {}   # {kind: chest/stairs/portal, node/cell}
 var _full_warn_ms := 0
 var rng := RandomNumberGenerator.new()
 
-# 震屏（trauma 模型）：小幅受击几乎不动，重击猛晃，平滑衰减
-var trauma := 0.0
-var _shake_t := 0.0
-var _look := Vector2.ZERO   # 镜头前视偏移
+# 震屏（trauma 模型）已移入 ArpgCameraDirector：镜头写入统一走一个出口，避免多处抢写
+var event_camera_lock: bool:
+	get:
+		return cam != null and cam.is_cinematic()
 
 # 压测 / 基准
 var _stress_n := 0
@@ -67,7 +125,6 @@ var _friends_n := -1          # --friends=N 覆盖（-1 = 用配置默认）
 var _want_apc := false        # --apc 调试招募
 var _squad_cmd_i := 0
 var player_combat_t := 0.0
-var event_camera_lock := false   # 事件镜头调度时锁定跟随
 var flags := {}                  # 事件旗标（set_flag/if 共用）
 
 # 事件引擎（core/events/event_system.gd，与战棋共用；接线见 docs/HANDOFF §2）
@@ -96,7 +153,7 @@ var _map_mtime := 0
 func _ready() -> void:
 	_setup_input()
 	hud = ArpgHUD.new()
-	add_child(hud)
+	_slot("界面").add_child(hud)
 	ui = hud
 	hud.game = self
 	hud.start_selected.connect(start_run)
@@ -122,10 +179,12 @@ func _ready() -> void:
 		elif a == "--apc":
 			_want_apc = true
 	# 队友节点容器（挂 main 下：换层不销毁；z=5 保证在世界地板/敌群之上可见）
-	party_root = Node2D.new()
+	party_root = get_node_or_null(NodePath("队伍"))
+	if party_root == null:
+		party_root = Node2D.new()
+		add_child(party_root)
 	party_root.y_sort_enabled = true
 	party_root.z_index = 5
-	add_child(party_root)
 	# 热重载：balance.json 保存即生效；地图改动提示 F3
 	ArpgBalance.reload_data()
 	_balance_mtime = _file_mtime(ArpgBalance.PATH)
@@ -156,6 +215,15 @@ func _ready() -> void:
 		var bot := ArpgAutopilot.new()
 		bot.main = self
 		add_child(bot)
+
+
+## 取场景里预置的容器节点；没有就返回 self（headless / 直接 new 的场景也能跑）。
+## 为什么要有这层：world/hud/party/camera 都是运行时 new 出来的，编辑器里原先完全看不见，
+## 场景树只有一个空根节点。现在 .tscn 里预置了「世界/队伍/镜头/界面」四个空容器，
+## 运行时往对应容器里挂，编辑器里就能看到清晰的分层结构。
+func _slot(node_name: String) -> Node:
+	var n := get_node_or_null(NodePath(node_name))
+	return n if n != null else self
 
 
 ## 用代码注册输入映射（免改 project.godot）：键盘 + Xbox/PS 手柄通用语义键位
@@ -261,7 +329,7 @@ func rumble(weak: float, strong: float, dur: float) -> void:
 
 func start_run(id: String) -> void:
 	char_id = id
-	floor_no = 1
+	floor_no = maxi(1, start_floor)      # 可视化配置：起始层（默认 1，等价于原行为）
 	kills = 0
 	rpg.setup()   # 刷新背包容量/任务表；金币与物品跨局保留（商店循环）
 	if not rpg.inventory.has("potion"):
@@ -283,7 +351,9 @@ func start_run(id: String) -> void:
 ## P0：招募 AI 队友（默认 2 名，其他角色模板）；--friends=N / --apc 可覆盖
 func _recruit_party() -> void:
 	var want := int(ArpgPartyConfig.cfg("start_friends"))
-	if _friends_n >= 0:
+	if start_friends >= 0:               # 可视化配置优先于 balance.json
+		want = start_friends
+	if _friends_n >= 0:                  # 命令行 --friends=N 优先级最高
 		want = _friends_n
 	var others := []
 	for cid in ArpgBalance.CHARS:
@@ -301,6 +371,13 @@ func _recruit_party() -> void:
 
 
 func build_floor() -> void:
+	# 旧玩家节点会随旧 world 一起释放：先留引用 + 快照成长数据。
+	# （玩家是节点，等级/经验/装备加成只活在节点上；重建节点若不搬运，下到第 2 层
+	#   就直接掉回 1 级——这是"进入第二层异常"的另一半。）
+	var prev_player = player
+	var carry := {}
+	if prev_player != null and is_instance_valid(prev_player):
+		carry = {"level": prev_player.level, "xp": prev_player.xp}
 	if is_instance_valid(world):
 		world.queue_free()
 	world = null
@@ -310,28 +387,31 @@ func build_floor() -> void:
 	if _stress_n > 0:
 		dungeon.generate_arena()
 	else:
-		dungeon.generate(floor_no)
+		dungeon.generate(floor_no, dungeon_seed + floor_no * 7919 if dungeon_seed != 0 else -1)
 
 	world = ArpgWorld.new()
-	add_child(world)
+	_slot("世界").add_child(world)
 	world.build(dungeon, self)
 	world.spawn_player(char_id)
 	player = world.player
+	if not carry.is_empty():
+		# 搬运成长：只搬等级/经验，派生属性按等级重算，避免两份真值打架
+		player.level = int(carry["level"])
+		player.xp = int(carry["xp"])
+	# 派生属性一律重算：等级成长 + 当前装备加成（新节点默认只有模板 1 级数值）
+	player.apply_level_stats()
+	player.hp = player.max_hp          # 换层回满（沿用原行为）
+	player.sp = player.max_sp
+	player.refresh_bars()
 
-	# 相机：跟随「当前主控单位」（主控切换时平滑过渡），挂在 main 上随楼层复用
-	camera = Camera2D.new()
-	camera.zoom = Vector2.ONE * 1.7
-	camera.limit_left = 0
-	camera.limit_top = 0
-	camera.limit_right = dungeon.w * ArpgData.TILE
-	camera.limit_bottom = dungeon.h * ArpgData.TILE
-	camera.position_smoothing_enabled = true
-	camera.position_smoothing_speed = 8.0
-	add_child(camera)
-	camera.position = player.position
-	camera.make_current()
-
-	# 队伍系统：导航重建 + 主控绑定 + 换层复活归队
+	# —— 队伍 / 主控：必须在本层重建玩家之后立刻重绑 ——
+	# ⚠️ 这里就是"下到第二层镜头失效 / 角色不受控"的根因：
+	# 旧实现只在 `current_unit == null` 时重绑，而换层后 current_unit 指向的是**上一层的玩家节点**，
+	# 它随旧 world 被 queue_free → 变成已释放对象。于是：
+	#   1. possession.is_possessed(新玩家) 恒为 false → 新玩家被当成 AI 单位，键盘鼠标全部失效
+	#   2. main 取不到有效焦点 → 镜头彻底停止跟随（表现为"镜头调度再次失效"）
+	#   3. HUD / 队友 LOD 每帧读 current_unit.position → 持续报错
+	# 判据改为"无效或被换掉"，而不是"为空"。
 	if party == null:
 		party = ArpgPartyManager.new()
 		party.setup(self)
@@ -340,13 +420,35 @@ func build_floor() -> void:
 	if possession == null:
 		possession = ArpgPossessionManager.new()
 		possession.setup(self, player)
-	elif possession.current_unit == null:
-		possession.current_unit = player
+	else:
+		var cur = possession.current_unit
+		if cur == null or not is_instance_valid(cur) or cur == prev_player:
+			possession.current_unit = player
+
+	# 镜头：调度器（director）复用节点，每层只重设边界；rig 由调度器持有
+	if cam == null:
+		cam = CameraDirector.new()
+		_slot("镜头").add_child(cam)
+		cam.focus_fallback = Callable(self, "_camera_focus")
+	cam.setup(self, dungeon)
+	camera = cam.rig
+	camera.make_current()
+	var c0 = _camera_focus()
+	cam.bind(c0, party.friends)
+	cam.reset(c0.position if c0 != null else player.position)
+
 	if _stress_n == 0:
 		party.revive_all_on_floor()
+		# 开局落点：按槽位环形展开且必须可走。
+		# 旧实现随机 ±50 偏移不校验 → 贴墙开局直接把队友放进墙里，一开局就在"卡住"状态。
 		for f in party.friends:
 			if not f.dead:
-				f.teleport_to(player.position + Vector2(randf_range(-50, 50), randf_range(-50, 50)))
+				var ang := float(party.slot_index(f)) * (TAU / 8.0) + 0.5
+				var p: Vector2 = player.position + Vector2.RIGHT.rotated(ang) * 44.0
+				var c := Vector2i((p / float(ArpgData.TILE)).floor())
+				if not party._is_open(c):
+					p = ArpgDungeon.cell_to_pos(party._nearest_open(c))
+				f.teleport_to(p)
 	# 换层后刷新队友的 world/main 引用（party_root 不随楼层销毁）
 	for f in party.friends:
 		f.world = world
@@ -361,21 +463,25 @@ func build_floor() -> void:
 			world.spawn_mob("imp", dungeon.random_cell_in(room), false, false)
 		hud.log("魔王的气息逼近——击败它就能凯旋！")
 	else:
-		# 敌人：逐个随机房间（跳过出发房间）
+		# 敌人：逐个随机房间（跳过出发房间；rooms 已按距起点距离排序，越靠后越深）
 		var count := ArpgBalance.floor_enemy_count(floor_no)
 		var pool := ArpgBalance.floor_pool(floor_no)
+		var room_hi := maxi(dungeon.rooms.size() - 1, 1)
 		for i in count:
-			var room: Rect2i = dungeon.rooms[rng.randi_range(1, dungeon.rooms.size() - 1)]
+			var room: Rect2i = dungeon.rooms[0]
+			if dungeon.rooms.size() > 1:
+				room = dungeon.rooms[rng.randi_range(1, room_hi)]
 			var cell := dungeon.random_cell_in(room)
 			if ArpgDungeon.cell_to_pos(cell).distance_to(ArpgDungeon.cell_to_pos(dungeon.start_cell)) < 200.0:
 				continue
 			var tpl_id := ArpgBalance.weighted_pick(pool, dungeon.rng)
 			world.spawn_mob(tpl_id, cell, rng.randf() < ArpgBalance.ELITE_CHANCE, false)
-		# 宝箱 ×2 + 出口楼梯（最远房间）
+		# 宝箱 ×2：优先放叶节点房间（只连一条走廊的尽头），跑一趟有回报
 		for i in 2:
-			var room2: Rect2i = dungeon.rooms[rng.randi_range(1, dungeon.rooms.size() - 1)]
-			world.spawn_chest(dungeon.random_cell_in(room2))
-		world.set_stairs(dungeon._center(dungeon.rooms[dungeon.rooms.size() - 1]))
+			world.spawn_chest(dungeon.random_cell_in(dungeon.loot_room(rng)))
+		# 楼梯放在生成器算好的最远房间（stair_cell），不再依赖 rooms 的下标含义
+		world.set_stairs(dungeon.stair_cell if dungeon.stair_cell.x >= 0 \
+			else dungeon._center(dungeon.rooms[dungeon.rooms.size() - 1]))
 
 	state = State.PLAY
 	hud.play_hud.visible = true
@@ -439,32 +545,30 @@ func _setup_stress() -> void:
 
 # ———————— 每帧 ————————
 
+## 镜头焦点：主控单位 → 玩家 → 无。
+## 单点取焦点，是为了让"节点被释放/换层/切人"这三种情况都只有一条判定路径。
+func _camera_focus() -> Node2D:
+	if possession != null and possession.current_unit != null \
+			and is_instance_valid(possession.current_unit):
+		return possession.current_unit
+	if player != null and is_instance_valid(player):
+		return player
+	return null
+
+
 func _process(delta: float) -> void:
 	_hot_reload_watch(delta)
+	# —— 镜头调度：放在流程状态判断之前 ——
+	# 事件镜头/结算镜头在非 PLAY 状态下也要能推进；否则状态一变镜头就"冻住"
+	if cam != null:
+		if state == State.PLAY:
+			cam.bind(_camera_focus(), party.friends if party != null else [])
+		cam.update(delta)
 	if state != State.PLAY:
 		return
-	if event_camera_lock and camera != null:
-		camera.offset = camera.offset.lerp(Vector2.ZERO, 0.1)
-		return
-	# 相机跟随当前主控单位（切换时靠平滑过渡做镜头过场）
-	if camera != null and possession != null and possession.current_unit != null:
-		camera.position = possession.current_unit.position
 	# 玩家战斗状态计时（队友 AI 参战判定用）
 	if player_combat_t > 0.0:
 		player_combat_t -= delta
-	# —— trauma 震屏：trauma² 平方曲线，低量几乎无感、高量猛烈，平滑衰减 ——
-	trauma = maxf(0.0, trauma - 1.7 * delta)
-	_shake_t += delta * 34.0
-	var shake_amt := trauma * trauma
-	if camera != null:
-		var shake_off := Vector2(
-			14.0 * shake_amt * sin(_shake_t * 1.7),
-			10.0 * shake_amt * sin(_shake_t * 2.3))
-		camera.rotation = 0.045 * shake_amt * sin(_shake_t * 1.1)
-		# 镜头前视：朝面向方向多看一点，跑动更有方向感
-		var look_target := (player.facing * 34.0) if player != null and not player.dead else Vector2.ZERO
-		_look = _look.lerp(look_target, 1.0 - pow(0.002, delta))
-		camera.offset = _look + shake_off
 
 	# 性能 HUD + 队伍面板（每 0.5s 刷新）
 	_perf_t -= delta
@@ -472,7 +576,9 @@ func _process(delta: float) -> void:
 		_perf_t = 0.5
 		hud.set_perf(Engine.get_frames_per_second(), world.mob_count(), world.projs.count, world.mobs.sim_ms)
 		if party != null:
-			hud.update_party(party_rows(), possession.current_unit.uid if possession.current_unit != null else "")
+			var cf0 = _camera_focus()
+			hud.set_gold(rpg.gold)
+			hud.update_party(party_rows(), cf0.uid if cf0 != null else "")
 			hud.set_debug_lines(_debug_rows())
 	# 压测特效轰炸（验证特效管线上限池）
 	if _stress_fx:
@@ -526,7 +632,7 @@ func hit_stop(dur := 0.05, sc := 0.1) -> void:
 func _update_interact_prompt() -> void:
 	_interact_target = {}
 	var text := ""
-	var cur = possession.current_unit if possession != null else player
+	var cur = _camera_focus()
 	if cur == null or cur.dead:
 		hud.set_prompt("")
 		return
@@ -547,7 +653,9 @@ func _update_interact_prompt() -> void:
 func stairs_dist() -> float:
 	if world.stairs_cell.x < 0:
 		return INF
-	var cur = possession.current_unit if possession != null else player
+	var cur = _camera_focus()
+	if cur == null:
+		return INF
 	return ArpgDungeon.cell_to_pos(world.stairs_cell).distance_to(cur.position)
 
 
@@ -559,6 +667,8 @@ func _do_interact() -> void:
 			floor_no += 1
 			play_sfx("cursor")
 			build_floor()
+			# 落地时补一道传送门：换层瞬间整层重建，必须在新的 world 上播
+			world.spawn_pxfx("portal", world.player.position, {"scale": 0.9, "speed": 1.4, "once": true})
 		"portal":
 			_settle(true, "凯旋而归！", "魔王已被讨伐，战利品铺满行囊。")
 
@@ -581,8 +691,11 @@ func open_chest(chest: ArpgChest) -> void:
 				for i in 3:
 					var cell := dungeon.random_cell_in(_near_room(player.position))
 					var e_pos := ArpgDungeon.cell_to_pos(cell)
-					world.spawn_enemy("imp", cell, false, false)
-					world.enemies[world.enemies.size() - 1].aggro = true
+					# 旧实现调用了不存在的 world.spawn_enemy / world.enemies（每层必崩）：
+					# 敌群是 SoA 数据层，只能走 spawn_mob + mobs.aggro[]
+					var mi: int = world.spawn_mob("imp", cell, false, false)
+					if mi >= 0:
+						world.mobs.aggro[mi] = 1
 					play_sfx("die")
 					world.spawn_popup("召唤！", e_pos, Color(1, 0.4, 0.3))
 			2:
@@ -595,7 +708,7 @@ func open_chest(chest: ArpgChest) -> void:
 		rumble(0.5, 0.9, 0.4)
 		return
 	# 正常掉落 1~3 件
-	world.fx_tex(chest.position, ArpgTex.tex(ArpgWorld.FX_LIGHT_RING_PATH), 0.0, 0.3, 1.0, 0.38, Color(1, 0.85, 0.4, 0.95), 0.0, true)
+	world.spawn_pxfx("burst", chest.position, {"scale": 0.5, "tint": Color(1, 0.85, 0.4, 0.95)})
 	world.burst(chest.position + Vector2(0, -6), ArpgTex.tex(ArpgWorld.FX_PARTICLE_PATH), Color(1, 0.9, 0.5), 8, 130.0, 0.4, 0.08)
 	var n := rng.randi_range(1, 3)
 	for i in n:
@@ -702,10 +815,17 @@ func _debug_rows() -> Array:
 				f.hp, f.max_hp, f.ai_target])
 	if arbiter != null and not arbiter.claims.is_empty():
 		out.append("拾取认领: %s" % str(arbiter.claims))
-	out.append("主控: %s" % (possession.current_unit.uid if possession != null and possession.current_unit != null else "?"))
+	var cf = _camera_focus()
+	out.append("主控: %s" % (cf.uid if cf != null else "?"))
 	if world != null and world.mobs != null:
 		out.append("AI 质量: 卡住 %.0f%% · 堆叠 %.0f%% · 敌群 %.2fms" % [
 			world.mobs.stuck_ratio * 100.0, world.mobs.stack_ratio * 100.0, world.mobs.sim_ms])
+	if camera != null:
+		out.append(camera.debug_info())
+	if dungeon != null:
+		out.append("地牢: " + dungeon.debug_stats())
+	if hud != null and hud.minimap != null:
+		out.append(hud.minimap.debug_info())
 	return out
 
 
@@ -722,21 +842,31 @@ func _load_party() -> void:
 
 
 func drink_potion() -> void:
+	var u = _camera_focus()
+	if u == null:
+		return
 	if not rpg.inventory.remove("potion", 1):
 		hud.log("没有药水了！")
 		return
 	var heal: int = int(ArpgBalance.ITEMS["potion"]["heal"])
-	var u = possession.current_unit if possession != null else player
 	u.hp = mini(u.max_hp, u.hp + heal)
 	u.heal_flash()
 	world.spawn_popup("+%d" % heal, u.position, Color(0.5, 1, 0.55))
 	world.spawn_nova(u.position, Color(0.5, 1, 0.6))
+	world.spawn_pxfx("heal", u.position + Vector2(0, -6), {"scale": 0.6, "speed": 1.4})
 	hud.log("%s 喝下回复药水（剩 %d 瓶）" % ["你" if u == player else u.unit_name, _potion_count()])
 	play_sfx("heal")
 
 
 func _potion_count() -> int:
 	return rpg.inventory.count("potion")
+
+
+## 掉落结算：金币/宝石到达角色时入账（结算时机由 drops.settle_mode 控制）
+func on_drop_collected(_kind: int, value: int) -> void:
+	if value <= 0:
+		return
+	rpg.gold += value
 
 
 func on_mob_dead(i: int) -> void:
@@ -747,6 +877,11 @@ func on_mob_dead(i: int) -> void:
 	if party != null:
 		party.gain_xp_all(world.mobs.xp[i])
 	world.spawn_death_poof(world.mobs.pos[i], Color(0.9, 0.85, 0.8))
+	# 金币/宝石爆量：这只怪"值多少"仍由 gold_drop_min/max 决定（经济不变），
+	# 掉多少颗、怎么散、怎么吸由 drops 段配置
+	var gold_total := rng.randi_range(int(ArpgBalance.data.get("gold_drop_min", 2)),
+		int(ArpgBalance.data.get("gold_drop_max", 6)))
+	world.spawn_drops(world.mobs.pos[i], gold_total, world.mobs.elite[i] == 1, world.mobs.boss[i] == 1)
 	if rng.randf() < 0.6:
 		world.spawn_pickup(world.mobs.pos[i], ArpgBalance.weighted_pick(ArpgBalance.drop_weight(floor_no), rng))
 	if world.mobs.boss[i] == 1:
@@ -792,13 +927,13 @@ func _manual_reload_balance() -> void:
 	hud.log("平衡数据已手动重载%s" % ("" if ok else "（解析失败，用内置默认）"))
 
 
-## 事件命令：镜头调度（事件期间锁定跟随，结束后平滑回归玩家）
+## 事件命令：镜头调度（压入"定点镜头"到调度器，到期自动弹栈回归跟随）
+## 调用方（事件引擎）await 的是"这个镜头占用的时长"，所以这里等到 dur 再返回。
 func event_camera_focus(pos: Vector2, dur: float) -> void:
-	event_camera_lock = true
-	var tw := create_tween()
-	tw.tween_property(camera, "position", pos, maxf(0.25, dur * 0.4)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	await get_tree().create_timer(maxf(0.3, dur)).timeout
-	event_camera_lock = false
+	var d := maxf(0.25, dur)
+	if cam != null:
+		cam.play_focus_point(pos, d)
+	await get_tree().create_timer(d).timeout
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -908,10 +1043,10 @@ func _back_to_title() -> void:
 
 
 ## 震屏入口：v 为 trauma 强度 0~1（0.15 轻拍 / 0.35 受击 / 0.7 大事件）
-## 震屏入口：v 为 trauma 强度 0~1（0.15 轻拍 / 0.35 受击 / 0.7 大事件）
 func add_shake(v: float) -> void:
 	var scale := float(settings.get_value("screen_shake")) if settings != null else 1.0
-	trauma = clampf(trauma + v * scale, 0.0, 1.0)
+	if cam != null:
+		cam.add_shake(v * scale)
 
 
 func play_sfx(sname: String, db: float = -6.0) -> void:

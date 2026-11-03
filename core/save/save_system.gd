@@ -69,10 +69,13 @@ func load_game(slot: int = 1) -> String:
 	var pd: Dictionary = d.get("player", {})
 	main.player.level = int(pd.get("level", 1))
 	main.player.xp = int(pd.get("xp", 0))
-	main.player.hp = int(pd.get("hp", main.player.max_hp))
-	main.player.sp = int(pd.get("sp", main.player.sp))
+	# 等级 → 派生属性（上限/攻击 + 当前装备加成）。旧实现只回填 level，
+	# 读档后 max_hp/atk 还是模板 1 级值 —— 等级白升。
+	main.player.apply_level_stats()
+	main.player.hp = clampi(int(pd.get("hp", main.player.max_hp)), 1, main.player.max_hp)
+	main.player.sp = clampi(int(pd.get("sp", main.player.sp)), 0, main.player.max_sp)
 	main.player.command = str(pd.get("command", "follow"))
-	main.player.hp_bar.update_values(float(main.player.hp) / main.player.max_hp, float(main.player.sp) / main.player.max_sp)
+	main.player.refresh_bars()
 	# 队伍（稳定 uid 恢复）
 	main.party.from_dict(d.get("party", {}))
 	# 主控

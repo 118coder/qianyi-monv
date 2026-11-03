@@ -52,6 +52,9 @@ var iframes := 0.0
 var knock := Vector2.ZERO
 var lunge := Vector2.ZERO
 var _move_vel := Vector2.ZERO
+var _speed_scale := 1.0        # 到达减速（避免"冲过头—回头"抖动）
+var _slide_bias := Vector2.ZERO  # 贴墙时的切向偏置（下一拍混入方向，治"顶墙原地抖"）
+var _slide_t := 0.0
 
 var main: Node
 var world: Node
@@ -67,7 +70,7 @@ var _think_t := 0.0
 ## 离主控单位越远，思考越稀疏（性能 LOD，需求书 §6）
 func _think_mult() -> float:
 	var ref := position
-	if main.possession != null and main.possession.current_unit != null:
+	if main.possession != null and is_instance_valid(main.possession.current_unit):
 		ref = main.possession.current_unit.position
 	if position.distance_to(ref) > float(ArpgPartyConfig.cfg("far_unit_distance")):
 		return float(ArpgPartyConfig.cfg("far_think_multiplier"))
@@ -110,6 +113,8 @@ func setup(m: Node, w: Node, unit_uid: String, template: Dictionary, apc: bool, 
 	proj_spd = float(template.get("proj_spd", 400.0))
 	command_queue = ArpgCommandQueue.new()
 	command_queue.push("follow")
+	# 决策节拍错相：多名队友不在同一帧思考（避免同帧寻路尖峰 + 集体同步动作）
+	_think_t = randf() * float(ArpgPartyConfig.cfg("think_interval"))
 
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
 	collision_layer = 2
@@ -145,6 +150,7 @@ func _physics_process(delta: float) -> void:
 
 	var dir := Vector2.ZERO
 	if main.possession.is_possessed(self):
+		_speed_scale = 1.0
 		dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 		if dir != Vector2.ZERO:
 			facing_name = _dir_name(dir)
@@ -166,41 +172,89 @@ func _physics_process(delta: float) -> void:
 		if ai_want_skill:
 			ai_want_skill = false
 			try_skill(ai_attack_pos)
+	# 贴墙切向偏置：上一帧撞墙 → 这一帧沿墙面滑走，而不是继续直顶。
+	# （直顶时位移≈0、朝向反复，既"看着像卡住"，也让原有的卡住判定拿不到进展）
+	if _slide_t > 0.0:
+		_slide_t = maxf(0.0, _slide_t - delta)
+		if dir.length_squared() > 0.001:
+			var blended: Vector2 = dir + _slide_bias * 0.85
+			if blended.length_squared() > 0.0001:
+				dir = blended.normalized()
 	knock = knock.move_toward(Vector2.ZERO, 1000.0 * delta)
 	lunge = lunge.move_toward(Vector2.ZERO, 1500.0 * delta)
-	velocity = dir * spd + knock + lunge + _separation() * spd * 0.65
+	velocity = dir * spd * _speed_scale + knock + lunge + _separation(dir.length_squared() > 0.001) * spd * 0.65
 	move_and_slide()
+	_update_slide(dir)
 	_moving = dir.length_squared() > 0.001
 	_animate(delta)
 	if in_combat_until > 0.0:
 		in_combat_until -= delta
 
 
-## AI 移动执行：沿寻路路点走（新路径首拍做一次拉直：跳过可直视的中间点）
+## AI 移动执行：沿寻路路点走（新路径首拍做一次拉直）
+## 迭代推进而非递归：到达 / 可直视下一点 → 直接跳过，切角更少、不会栈溢出
 func _ai_dir(_delta: float) -> Vector2:
-	if ai_path_i == 0 and ai_path.size() > 1 and main != null and main.party != null:
+	_speed_scale = 1.0
+	if main == null or main.party == null:
+		return Vector2.ZERO
+	if ai_path_i == 0 and ai_path.size() > 1:
 		ai_path = main.party.smooth_path(position, ai_path)
-	if ai_path_i < ai_path.size():
-		var wp := ai_path[ai_path_i]
-		if position.distance_to(wp) < 22.0:
-			ai_path_i += 1
-			return _ai_dir(_delta)
+	var guard := 0
+	while ai_path_i < ai_path.size() and guard < 8:
+		guard += 1
+		var wp: Vector2 = ai_path[ai_path_i]
 		var d := wp - position
+		var dl := d.length()
+		if dl < 18.0:
+			ai_path_i += 1
+			continue
+		# 提前跳点：到当前点已能直视下一个点 → 不必走到点上再拐（治"蹭墙角"）
+		if ai_path_i + 1 < ai_path.size() and dl < 46.0 \
+				and main.party.line_clear(position, ai_path[ai_path_i + 1]):
+			ai_path_i += 1
+			continue
+		if ai_path_i == ai_path.size() - 1 and dl < 36.0:
+			_speed_scale = clampf(dl / 36.0, 0.45, 1.0)
 		facing_name = _dir_name(d)
-		return d.normalized()
+		return d / dl
 	if ai_has_goal:
 		var g := ai_goal - position
-		if g.length() < 12.0:
+		var gl := g.length()
+		if gl < 14.0:
 			ai_has_goal = false
+			ai_path.clear()
+			ai_path_i = 0
 			return Vector2.ZERO
+		if gl < 44.0:
+			_speed_scale = clampf(gl / 44.0, 0.5, 1.0)
 		facing_name = _dir_name(g)
-		return g.normalized()
+		return g / gl
 	return Vector2.ZERO
+
+
+## 撞墙记录：把"顶着墙的方向"换算成"沿墙滑的方向"，下一拍混入移动方向
+func _update_slide(dir: Vector2) -> void:
+	if dir.length_squared() < 0.001:
+		return
+	for i in get_slide_collision_count():
+		var n: Vector2 = get_slide_collision(i).get_normal()
+		if n.dot(dir) < -0.15:
+			var tangent: Vector2 = dir.slide(n)
+			if tangent.length_squared() > 0.0001:
+				_slide_bias = tangent.normalized()
+				_slide_t = 0.20
+				return
+
+
+## 朝向向量（镜头前视 / 集合点计算读取）
+func face_dir() -> Vector2:
+	return _face_vec()
 
 
 ## 软分离：队友之间、与玩家之间保持个人空间（不叠影、不挡镜头、不挤门）
 ## 含最近敌人：被怪贴脸时推开，不再与敌群叠影
-func _separation() -> Vector2:
+## 站定时分离力减半：否则"站着互相推"会让待机看起来在抖
+func _separation(moving: bool = true) -> Vector2:
 	var sep := Vector2.ZERO
 	var spread := float(ArpgPartyConfig.cfg("command")["follow"].get("spread", 52.0))
 	var r_friend := maxf(30.0, spread * 0.58)
@@ -225,6 +279,8 @@ func _separation() -> Vector2:
 			var lm: float = dm.length()
 			if lm < 28.0 and lm > 0.01:
 				sep += dm / lm * (1.0 - lm / 28.0) * 0.9
+	if not moving:
+		sep *= 0.45
 	return sep.limit_length(1.2)
 
 
@@ -261,17 +317,30 @@ func _set_frame(f: int) -> void:
 func try_attack(target_pos: Vector2) -> void:
 	if dead or atk_timer > 0.0:
 		return
-	atk_timer = 0.42
-	var to_t := target_pos - position
-	if to_t.length_squared() > 1.0:
-		facing_name = _dir_name(to_t)
+	# 攻速走模板（与玩家同源）；旧实现写死 0.42，弓手/魔女的快慢完全体现不出来
+	atk_timer = float(tpl.get("atk_cd", 0.42))
+	# 瞄准必须用「连续方向」。
+	# 旧实现把方向坍缩成 _face_vec() 的四个正方向再发射：目标不在正上/下/左/右
+	# （绝大多数情况）时弹道就是歪的，直线弹幕必然打空——这就是"不同一直线就打不中"的根因。
+	# facing_name 只用于贴图选行，弹道/挥砍角度一律用 aim。
+	var aim := target_pos - position
+	if aim.length_squared() > 1.0:
+		aim = aim.normalized()
+		facing_name = _dir_name(aim)
+	else:
+		aim = _face_vec()
 	if weapon == "melee":
-		lunge = _face_vec() * 170.0
-		world.spawn_slash(position + _face_vec() * 13.0, _face_vec().angle(), Color(0.75, 0.9, 1.0))
-		for i in world.mobs_in_arc(position, _face_vec().angle(), atk_range):
+		lunge = aim * 170.0
+		world.spawn_slash(position + aim * 13.0, aim.angle(), Color(0.75, 0.9, 1.0))
+		for i in world.mobs_in_arc(position, aim.angle(), atk_range):
 			world.damage_mob(i, atk, position)
 	else:
-		world.spawn_projectile(position + _face_vec() * 14.0, _face_vec(), proj_spd, atk,
+		# 枪口前移一点点，但别把弹丸生进墙里（生在墙内的弹会立刻消失，读起来像"没打出去"）
+		var muzzle := position + aim * 12.0
+		if world.dungeon != null \
+				and not world.dungeon.is_floor(Vector2i((muzzle / float(ArpgData.TILE)).floor())):
+			muzzle = position
+		world.spawn_projectile(muzzle, aim, proj_spd, atk,
 			"player", Color(0.65, 0.95, 1.0) if weapon == "ranged" else Color(0.85, 0.55, 1.0),
 			"arrow" if weapon == "ranged" else "orb")
 	main.play_sfx("attack", -10.0)
@@ -388,6 +457,10 @@ func revive(ratio: float) -> void:
 func teleport_to(p: Vector2) -> void:
 	position = p
 	knock = Vector2.ZERO
+	lunge = Vector2.ZERO
+	_slide_bias = Vector2.ZERO
+	_slide_t = 0.0
+	_speed_scale = 1.0
 	ai_path.clear()
 	ai_path_i = 0
 	ai_has_goal = false

@@ -30,6 +30,32 @@ static var CONFIG := {
 		},
 	},
 
+	# 队友 AI 行为参数（S/A 评审：目标选择、风筝、卡住处置、到位迟滞）
+	# 正式数值在 data/balance.json 的 party.ai 段，这里只做 JSON 缺键兜底
+	"ai": {
+		"self_defense_radius": 150.0,   # 被怪贴到这个距离必还手
+		"assist_radius": 300.0,         # 玩家参战时的协战半径
+		"assist_idle_radius": 200.0,    # 玩家未参战时仍会清理的"贴近玩家"半径
+		"los_penalty": 0.9,             # 隔墙目标评分扣分
+		"stick_bonus": 0.6,             # 当前目标粘性
+		"switch_margin": 1.25,          # 换目标需要的分数倍数
+		"reach_timeout": 6.0,           # 追同一目标超时打不到 → 拉黑
+		"blacklist_time": 5.0,
+		"ranged_engage": 265.0,         # 远程接敌距离
+		"ranged_keep_min": 125.0,       # 远程后撤线
+		"ranged_keep_max": 225.0,       # 远程前压线
+		"arrive_radius": 28.0,          # 跟随到点判定
+		"resume_radius": 48.0,          # 跟随重新起步判定（迟滞）
+		"pickup_threat_radius": 220.0,  # 附近有怪时不捡东西
+		"skill_min_enemies": 2,
+		"aim_max_lead": 0.55,           # 弹道提前量上限（秒）：目标速度 × 该时间
+		"stuck_repath": 0.30,           # 卡住分级处置时间轴
+		"stuck_sidestep": 0.75,
+		"stuck_regroup": 1.50,
+		"stuck_teleport": 2.50,
+		"hold_leash": 1.6,              # 待机自卫的最大脱离半径（×defense_radius）
+	},
+
 	"possession_cooldown": 1.5,     # 主控切换冷却（防卡 CD / 取消惩罚滥用）
 	"friend_potion_use": false,     # AI 是否自动喝药（默认保守：不喝，低血撤退）
 	"friend_sp_regen": 3.0,         # 队友 SP 每秒回复
@@ -38,8 +64,7 @@ static var CONFIG := {
 	"revive_ratio": 0.5,            # 复活时血量比例
 	"low_hp_retreat_ratio": 0.25,   # 全局低血撤退线（指令里未单独配置时用）
 
-	# 卡住恢复：先绕行，超时传送到玩家身边并提示
-	"stuck_teleport_after": 2.5,
+	# 决策节拍与寻路节流（卡住处置相关时间轴在下方 "ai" 段）
 	"think_interval": 0.15,         # AI 决策间隔（队友间自动错相）
 	"nav_repath_interval": 0.8,     # 寻路重算间隔
 	"far_unit_distance": 1200.0,    # 距玩家超过此距离降低决策频率

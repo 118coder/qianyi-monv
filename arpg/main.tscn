@@ -1,6 +1,26 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://arpg/main.gd" id="1_arpg"]
+[ext_resource type="Script" path="res://arpg/editor_preview.gd" id="2_preview"]
+[ext_resource type="Script" path="res://arpg/scene_layer.gd" id="3_layer"]
+[ext_resource type="Script" path="res://arpg/ui_layer.gd" id="4_ui"]
 
 [node name="ArpgMain" type="Node2D"]
 script = ExtResource("1_arpg")
+
+[node name="世界" type="Node2D" parent="."]
+script = ExtResource("3_layer")
+
+[node name="队伍" type="Node2D" parent="."]
+z_index = 5
+y_sort_enabled = true
+script = ExtResource("3_layer")
+
+[node name="镜头" type="Node2D" parent="."]
+script = ExtResource("3_layer")
+
+[node name="界面" type="CanvasLayer" parent="."]
+script = ExtResource("4_ui")
+
+[node name="编辑器预览" type="Node2D" parent="."]
+script = ExtResource("2_preview")

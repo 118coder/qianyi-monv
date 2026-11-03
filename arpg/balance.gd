@@ -244,6 +244,30 @@ static func defaults() -> Dictionary:
 			"arc_blend": 0.22,
 			"strafe_ratio": 0.5
 		},
+		"minimap": {
+			"enabled": true, "width": 184.0, "height": 132.0,
+			"reveal_radius": 7, "reveal_interval": 0.12,
+		},
+		"drops": {
+			"enabled": true, "settle_mode": "arrive", "elite_mult": 2.0, "boss_mult": 6.0,
+			"common": {
+				"scatter_time": 0.45, "friction": 3.4, "bounce": 0.35,
+				"scatter_speed_min": 70.0, "scatter_speed_max": 215.0,
+				"attract_radius": 165.0, "attract_delay": 0.28,
+				"attract_speed_start": 140.0, "attract_speed_end": 820.0,
+				"attract_time": 0.42, "arrive_dist": 12.0,
+				"lifetime": 14.0, "scale_start": 1.0, "scale_end": 0.35,
+			},
+			"gold": {"count_min": 5, "count_max": 9},
+			"gem": {"chance": 0.18, "value": 8, "scatter_speed_max": 250.0},
+		},
+		"camera": {
+			"base_zoom": 1.7, "min_zoom": 1.12, "pan_weight": 0.42, "safe_frac": 0.34,
+			"fit_bias": 0.9, "track_ratio": 1.3, "track_release": 1.3, "margin": 30.0,
+			"smooth_time": 0.16, "max_speed": 2400.0,
+			"zoom_out_rate": 3.0, "zoom_in_rate": 1.5, "zoom_deadband": 0.06,
+			"max_shot_time": 6.0, "focus_rate": 12.0, "look_ahead": 34.0
+		},
 		"xp_base": 18, "xp_per_level": 14,
 		"floor_enemy_count_base": 5, "floor_enemy_count_per": 2,
 		"chars": {
@@ -346,9 +370,19 @@ static func defaults() -> Dictionary:
 					"engage_with_player": true, "engage_radius": 300.0},
 				"hold": {"self_defense": true, "defense_radius": 70.0, "pickup": false},
 			},
+			"ai": {
+				"self_defense_radius": 150.0, "assist_radius": 300.0, "assist_idle_radius": 200.0,
+				"los_penalty": 0.9, "stick_bonus": 0.6, "switch_margin": 1.25,
+				"reach_timeout": 6.0, "blacklist_time": 5.0,
+				"ranged_engage": 265.0, "ranged_keep_min": 125.0, "ranged_keep_max": 225.0,
+				"arrive_radius": 28.0, "resume_radius": 48.0,
+				"pickup_threat_radius": 220.0, "skill_min_enemies": 2, "aim_max_lead": 0.55,
+				"stuck_repath": 0.3, "stuck_sidestep": 0.75, "stuck_regroup": 1.5,
+				"stuck_teleport": 2.5, "hold_leash": 1.6,
+			},
 			"possession_cooldown": 1.5, "friend_potion_use": false, "friend_sp_regen": 3.0,
 			"xp_share_ratio": 1.0, "revive_on_floor_change": true, "revive_ratio": 0.5,
-			"low_hp_retreat_ratio": 0.25, "stuck_teleport_after": 6.0,
+			"low_hp_retreat_ratio": 0.25,
 			"think_interval": 0.15, "nav_repath_interval": 0.8,
 			"far_unit_distance": 1200.0, "far_think_multiplier": 3.0,
 			"apc_tags": {"mercenary": {"can_command": true, "can_possess": false, "counts_to_cap": false, "temporary": true}},

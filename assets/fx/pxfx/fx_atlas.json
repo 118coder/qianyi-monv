@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "source": "pixelfx (MIT) https://github.com/patch-gg/pixelfx",
+  "effects": {
+    "slash": {
+      "file": "res://assets/fx/pxfx/slash.png",
+      "frames": 24,
+      "cols": 5,
+      "rows": 5,
+      "frame_w": 136,
+      "frame_h": 104,
+      "fps": 30,
+      "loop": false,
+      "pivot": [
+        44,
+        92
+      ],
+      "src": "melee/sword-slash",
+      "use": "近战斩击：玩家与队友普攻"
+    },
+    "hit": {
+      "file": "res://assets/fx/pxfx/hit.png",
+      "frames": 16,
+      "cols": 4,
+      "rows": 4,
+      "frame_w": 136,
+      "frame_h": 80,
+      "fps": 30,
+      "loop": false,
+      "pivot": [
+        44,
+        64
+      ],
+      "src": "impacts/hit-spark",
+      "use": "命中火花：任何伤害命中"
+    },
+    "burst": {
+      "file": "res://assets/fx/pxfx/burst.png",
+      "frames": 33,
+      "cols": 6,
+      "rows": 6,
+      "frame_w": 184,
+      "frame_h": 144,
+      "fps": 30,
+      "loop": false,
+      "pivot": [
+        92,
+        72
+      ],
+      "src": "explosions/cartoon-pow",
+      "use": "小爆炸：技能命中、陷阱箱"
+    },
+    "heal": {
+      "file": "res://assets/fx/pxfx/heal.png",
+      "frames": 58,
+      "cols": 9,
+      "rows": 7,
+      "frame_w": 80,
+      "frame_h": 104,
+      "fps": 30,
+      "loop": false,
+      "pivot": [
+        40,
+        92
+      ],
+      "src": "holy/heal",
+      "use": "治疗光环：喝药与回血技能"
+    },
+    "coin": {
+      "file": "res://assets/fx/pxfx/coin.png",
+      "frames": 48,
+      "cols": 7,
+      "rows": 7,
+      "frame_w": 56,
+      "frame_h": 56,
+      "fps": 30,
+      "loop": true,
+      "pivot": [
+        28,
+        48
+      ],
+      "src": "pickups/coin-spin",
+      "use": "金币：掉落与拾取"
+    },
+    "gem": {
+      "file": "res://assets/fx/pxfx/gem.png",
+      "frames": 72,
+      "cols": 9,
+      "rows": 8,
+      "frame_w": 64,
+      "frame_h": 64,
+      "fps": 30,
+      "loop": true,
+      "pivot": [
+        32,
+        56
+      ],
+      "src": "pickups/gem-spin",
+      "use": "宝石：掉落物"
+    },
+    "dissolve": {
+      "file": "res://assets/fx/pxfx/dissolve.png",
+      "frames": 109,
+      "cols": 12,
+      "rows": 10,
+      "frame_w": 96,
+      "frame_h": 112,
+      "fps": 30,
+      "loop": false,
+      "pivot": [
+        48,
+        100
+      ],
+      "src": "spawn/dissolve-burn",
+      "use": "燃尽消散：怪物死亡"
+    },
+    "portal": {
+      "file": "res://assets/fx/pxfx/portal.png",
+      "frames": 72,
+      "cols": 8,
+      "rows": 9,
+      "frame_w": 152,
+      "frame_h": 116,
+      "fps": 30,
+      "loop": true,
+      "pivot": [
+        76,
+        106
+      ],
+      "src": "arcane/portal",
+      "use": "传送门：楼梯与上下层"
+    },
+    "frost": {
+      "file": "res://assets/fx/pxfx/frost.png",
+      "frames": 103,
+      "cols": 9,
+      "rows": 12,
+      "frame_w": 144,
+      "frame_h": 96,
+      "fps": 30,
+      "loop": false,
+      "pivot": [
+        72,
+        75
+      ],
+      "src": "ice/frost-nova",
+      "use": "冰霜新星：范围技"
+    },
+    "zap": {
+      "file": "res://assets/fx/pxfx/zap.png",
+      "frames": 28,
+      "cols": 5,
+      "rows": 6,
+      "frame_w": 144,
+      "frame_h": 112,
+      "fps": 30,
+      "loop": false,
+      "pivot": [
+        76,
+        56
+      ],
+      "src": "lightning/zap-hit",
+      "use": "闪电命中：雷系技能"
+    },
+    "arrow": {
+      "file": "res://assets/fx/pxfx/arrow.png",
+      "frames": 18,
+      "cols": 3,
+      "rows": 6,
+      "frame_w": 112,
+      "frame_h": 32,
+      "fps": 30,
+      "loop": true,
+      "pivot": [
+        92,
+        16
+      ],
+      "src": "projectiles/arrow",
+      "use": "箭矢：弓手弹道"
+    },
+    "mana": {
+      "file": "res://assets/fx/pxfx/mana.png",
+      "frames": 55,
+      "cols": 7,
+      "rows": 8,
+      "frame_w": 104,
+      "frame_h": 75,
+      "fps": 30,
+      "loop": false,
+      "pivot": [
+        52,
+        62
+      ],
+      "src": "arcane/mana-burst",
+      "use": "魔力爆发：法术起手"
+    }
+  }
+}

@@ -226,14 +226,22 @@ func _physics_process(delta: float) -> void:
 		sprite.visible = true
 
 
-## AI 移动执行：沿寻路路点走（与队友同构）
+## AI 移动执行：沿寻路路点走（与队友同构：迭代推进 + 提前跳点，不再递归）
 func _ai_dir() -> Vector2:
-	if ai_path_i < ai_path.size():
-		var wp := ai_path[ai_path_i]
-		if position.distance_to(wp) < 22.0:
+	var guard := 0
+	while ai_path_i < ai_path.size() and guard < 8:
+		guard += 1
+		var wp: Vector2 = ai_path[ai_path_i]
+		var d := wp - position
+		var dl := d.length()
+		if dl < 18.0:
 			ai_path_i += 1
-			return _ai_dir()
-		return (wp - position).normalized()
+			continue
+		if ai_path_i + 1 < ai_path.size() and dl < 46.0 and main.party != null \
+				and main.party.line_clear(position, ai_path[ai_path_i + 1]):
+			ai_path_i += 1
+			continue
+		return d / dl
 	if ai_has_goal:
 		var g := ai_goal - position
 		if g.length() < 12.0:
@@ -248,7 +256,7 @@ func _ai_dir() -> Vector2:
 ## 离主控单位越远，思考越稀疏（性能 LOD，需求书 §6）
 func _think_mult() -> float:
 	var ref := position
-	if main.possession != null and main.possession.current_unit != null:
+	if main.possession != null and is_instance_valid(main.possession.current_unit):
 		ref = main.possession.current_unit.position
 	if position.distance_to(ref) > float(ArpgPartyConfig.cfg("far_unit_distance")):
 		return float(ArpgPartyConfig.cfg("far_think_multiplier"))
@@ -274,6 +282,24 @@ func try_skill(target_pos: Vector2) -> void:
 		facing = to_t.normalized()
 		_update_facing_name(to_t)
 	use_skill(0)
+
+
+## 按等级重算派生属性：基础值 + 每级成长 ×(等级-1)，再叠加当前装备加成。
+## 换层重建节点、读档后都必须走这里，否则 level 是 3 但 max_hp/atk 还是 1 级的值。
+func apply_level_stats() -> void:
+	var g: Dictionary = tpl.get("growth", {})
+	var lv := maxi(level - 1, 0)
+	max_hp = int(tpl.get("hp", max_hp)) + int(g.get("hp", 0)) * lv
+	atk = int(tpl.get("atk", atk)) + int(g.get("atk", 0)) * lv
+	equip_hp = 0
+	recalc_equipment()
+	hp = mini(hp, max_hp)
+	refresh_bars()
+
+
+## 血条/SP 条刷新（换层重建节点、恢复等级与装备加成后调用）
+func refresh_bars() -> void:
+	hp_bar.update_values(float(hp) / maxf(float(max_hp), 1.0), float(sp) / maxf(float(max_sp), 1.0))
 
 
 func heal_flash() -> void:
@@ -382,6 +408,7 @@ func use_skill(slot: int) -> void:
 			hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
 			world.spawn_popup("+%d" % heal, position, Color(0.5, 1, 0.55))
 			world.spawn_nova(position, Color(0.55, 1, 0.65))
+			world.spawn_pxfx("heal", position + Vector2(0, -6), {"scale": 0.7, "speed": 1.3})
 		_:
 			pop(1.25, 0.85)
 			for i in world.mobs_in_radius(position, 95.0):
@@ -389,6 +416,7 @@ func use_skill(slot: int) -> void:
 			for i in 12:
 				world.spawn_projectile(position, Vector2.RIGHT.rotated(TAU * i / 12.0), 275.0, eff_atk(), "player", Color(1.0, 0.6, 0.28), "bullet")
 			world.spawn_nova(position, Color(1.0, 0.55, 0.25))
+			world.spawn_pxfx("mana", position, {"scale": 0.8, "speed": 1.5})
 	main.play_sfx("fire" if kind == "nova" else "skill")
 	main.rumble(0.22, 0.48, 0.2)
 	if kind == "nova":

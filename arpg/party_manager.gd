@@ -7,7 +7,13 @@ var main: Node
 var friends: Array = []              # Array[ArpgFriendUnit]
 var nav := AStarGrid2D.new()
 var _nav_floor := -1
+var _nav_id := 0                     # 导航建在哪张 dungeon 实例上（同层重开必须重建）
 var _uid_counter := 0
+var _slot_of := {}                   # uid → 编队槽位（稳定：一旦分配不再变）
+
+## 扇形编队角度（相对"队长背后"方向）：0 正后方，左右交替展开
+const _FAN := [0.0, 0.55, -0.55, 1.05, -1.05, 1.55, -1.55, 2.85]
+const _FAN_TRIES := [0.6, -0.6, 1.2, -1.2, 1.9, -1.9, 2.6, -2.6]
 
 
 func setup(m: Node) -> void:
@@ -130,21 +136,67 @@ func possessable() -> Array:
 	return out
 
 
-## 松散编队点：存活队友按序绕玩家均匀分布，避免挤门
-## 落点若在墙里（玩家贴墙时常见）→ 吸附最近可走格，避免每拍重算都指向墙内
+## 松散编队点：**以主控单位为队长**，站在其背后呈扇面展开（不挡视线、不挤身位）
+## 槽位一旦分配就固定（有人倒下不会让全队换位）；落点必做可走校验
 func formation_point(unit) -> Vector2:
-	var alive := alive_friends()
-	var idx: int = alive.find(unit)
-	if idx < 0:
-		idx = 0
+	var leader = _leader()
+	if leader == null:
+		return unit.position
 	var dist := float(ArpgPartyConfig.cfg("command")["follow"]["follow_distance"])
-	var n := maxi(alive.size(), 1)
-	var ang := TAU * idx / n + PI * 0.25
-	var p: Vector2 = main.player.position + Vector2.RIGHT.rotated(ang) * dist
-	var c := Vector2i((p / float(ArpgData.TILE)).floor())
-	if not _is_open(c):
-		return ArpgDungeon.cell_to_pos(_nearest_open(c))
-	return p
+	var idx := slot_index(unit)
+	var ring := int(idx / 8)                       # 超过 8 人排第二圈
+	var ang_off: float = float(_FAN[idx % 8])
+	var fdir: Vector2 = _leader_facing(leader)
+	if fdir.length_squared() < 0.01:
+		fdir = Vector2.DOWN
+	var back: Vector2 = -fdir.normalized()
+	var radius: float = dist * (1.0 + 0.55 * float(ring))
+	var p: Vector2 = leader.position + back.rotated(ang_off) * radius
+	if _is_open(Vector2i((p / float(ArpgData.TILE)).floor())):
+		return p
+	# 背向点落在墙里（贴墙/贴角极常见）：沿同一半径左右试探，别再指向墙内
+	for off in _FAN_TRIES:
+		var p2: Vector2 = leader.position + back.rotated(ang_off + float(off)) * radius
+		if _is_open(Vector2i((p2 / float(ArpgData.TILE)).floor())):
+			return p2
+	return ArpgDungeon.cell_to_pos(_nearest_open(Vector2i((p / float(ArpgData.TILE)).floor())))
+
+
+## 编队槽位：按分配顺序编号，分配后固定（存档/换层都不重排）
+func slot_index(unit) -> int:
+	var id: String = str(unit.uid)
+	if _slot_of.has(id):
+		return int(_slot_of[id])
+	var used := {}
+	for k in _slot_of.values():
+		used[int(k)] = true
+	var n := 0
+	while used.has(n):
+		n += 1
+	_slot_of[id] = n
+	return n
+
+
+## 队长 = 当前主控单位（切人后队友跟的是"你正在操作的那个人"，而不是永远跟剑士）
+func _leader():
+	if main == null:
+		return null
+	if main.possession != null and main.possession.current_unit != null \
+			and is_instance_valid(main.possession.current_unit):
+		return main.possession.current_unit
+	return main.player
+
+
+func _leader_facing(leader) -> Vector2:
+	if leader == null:
+		return Vector2.DOWN
+	if leader is ArpgPlayer:
+		return leader.facing
+	if leader is ArpgFriendUnit:
+		return leader.face_dir()
+	if leader.has_method("face_dir"):
+		return leader.call("face_dir")
+	return Vector2.DOWN
 
 
 func _is_open(c: Vector2i) -> bool:
@@ -178,8 +230,11 @@ func smooth_path(from: Vector2, pts: PackedVector2Array) -> PackedVector2Array:
 
 
 ## 共享寻路（每层建一次 AStar；所有队友共用，查询预算由各自重拍间隔控制）
+## ⚠️ 只比"楼层号 + 尺寸"是不够的：同层重开（读档/F3 重载/重开一局）会换一张新地图，
+##    墙位完全不同却沿用旧 nav → 队友会往新地图的墙里走。故加实例 id 判定。
 func build_nav(d: ArpgDungeon) -> void:
-	if _nav_floor == main.floor_no and nav.size == Vector2i(d.w, d.h):
+	if _nav_floor == main.floor_no and _nav_id == d.get_instance_id() \
+			and nav.size == Vector2i(d.w, d.h):
 		return
 	nav.size = Vector2i(d.w, d.h)
 	nav.cell_size = Vector2(ArpgData.TILE, ArpgData.TILE)
@@ -192,6 +247,7 @@ func build_nav(d: ArpgDungeon) -> void:
 			if d.grid[x][y] != ArpgDungeon.FLOOR:
 				nav.set_point_solid(Vector2i(x, y))
 	_nav_floor = main.floor_no
+	_nav_id = d.get_instance_id()
 
 
 func nav_path(from: Vector2, to: Vector2) -> PackedVector2Array:
@@ -239,10 +295,19 @@ func revive_all_on_floor() -> void:
 	if not bool(ArpgPartyConfig.cfg("revive_on_floor_change")):
 		return
 	var ratio := float(ArpgPartyConfig.cfg("revive_ratio"))
+	var base: Vector2 = main.player.position
+	if main.possession != null and is_instance_valid(main.possession.current_unit):
+		base = main.possession.current_unit.position
 	for f in friends:
 		if f.dead:
 			f.revive(ratio)
-			f.position = main.possession.current_unit.position + Vector2(randf_range(-40, 40), randf_range(-40, 40))
+			# 复活落点必须可走（旧实现随机偏移，可能直接落进墙里 → 下一个 AI 周期继续卡）
+			var ang := float(slot_index(f)) * (TAU / 6.0) + 0.7
+			var p: Vector2 = base + Vector2.RIGHT.rotated(ang) * 42.0
+			var c := Vector2i((p / float(ArpgData.TILE)).floor())
+			if not _is_open(c):
+				p = ArpgDungeon.cell_to_pos(_nearest_open(c))
+			f.teleport_to(p)
 
 
 ## 三指令：小队级（T 键循环）与 单位级 两条入口
