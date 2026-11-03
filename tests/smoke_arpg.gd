@@ -314,6 +314,124 @@ func _run() -> void:
 	paused = false
 	main.map_events = []
 
+	print("== 13. AI 寻路 / 分离 / 索敌 ==")
+	# —— 流程场：BFS 方向场必须能绕墙（墙后格方向指向走廊，不是指向墙）——
+	var d13 := ArpgDungeon.new()
+	d13.generate(1, 777)
+	var anchor := d13.start_cell
+	var ff := ArpgFlowField.new()
+	ff.build(d13, anchor)
+	_check(ff.valid, "流程场构建成功")
+	_check(ff.dist[anchor.y * ff.w + anchor.x] == 0, "锚点距离 0")
+	var far_cell := Vector2i(-1, -1)
+	for c in d13.floor_cells():
+		if d13.is_floor(c) and c != anchor and ff.dist[c.y * ff.w + c.x] < ArpgFlowField.W_INF:
+			if c.distance_to(anchor) > 8:
+				far_cell = c
+				break
+	_check(far_cell.x >= 0, "存在可达远格")
+	if far_cell.x >= 0:
+		var fdir := ff.dir_at(ArpgDungeon.cell_to_pos(far_cell), ArpgData.TILE)
+		_check(fdir.length() > 0.5, "远格有行进方向")
+		# 沿方向场步进必须一路踩地板（不穿墙）
+		var cur := far_cell
+		var walk_ok := true
+		for step in 40:
+			var dv := ff.dir[cur.y * ff.w + cur.x]
+			if dv == Vector2.ZERO:
+				break
+			var nc := cur + Vector2i(roundi(dv.x), roundi(dv.y))
+			if not d13.is_floor(nc):
+				walk_ok = false
+				break
+			cur = nc
+		_check(walk_ok, "沿流程场步进不穿墙")
+		_check(cur == anchor or cur.distance_to(anchor) <= 2, "沿流程场能走到锚点（到达 %s）" % str(cur))
+	# 墙格无方向
+	var wall_dir := Vector2.ONE
+	for x in d13.w:
+		for y in d13.h:
+			if not d13.is_floor(Vector2i(x, y)):
+				wall_dir = ff.dir[y * ff.w + x]
+				break
+		if wall_dir != Vector2.ONE:
+			break
+	_check(wall_dir == Vector2.ZERO, "墙格方向为零")
+
+	# —— 分离：受控单元测试（直接验算分离力，不依赖 AI 移动/随机地图）——
+	var ms = main.world.mobs
+	var saved_count: int = ms.count
+	var saved_pos0: Vector2 = ms.pos[0]
+	var saved_hp0: int = ms.hp[0]
+	# 造两只完全重叠的怪（借用 0/1 号槽），验证分离力方向非零且互相背离
+	var p_test := Vector2(500.0, 500.0)
+	ms.pos[0] = p_test
+	ms.pos[1] = p_test
+	ms.hp[0] = 100
+	ms.hp[1] = 100
+	ms.radius[0] = 9.0
+	ms.radius[1] = 9.0
+	ms._build_hash()
+	ms._accumulate_separation(0)
+	var sep0: Vector2 = ms.sep[0]
+	ms._accumulate_separation(1)
+	var sep1: Vector2 = ms.sep[1]
+	_check(sep0.length() > 0.5, "完全重叠时分离力非零（%s）" % str(sep0))
+	_check(sep0.dot(sep1) < 0.0, "两怪分离力互相背离（%s vs %s）" % [str(sep0), str(sep1)])
+	# 远处邻居不产生力
+	ms.pos[1] = p_test + Vector2(200, 0)
+	ms._build_hash()
+	ms._accumulate_separation(0)
+	_check(ms.sep[0].length() < 0.01, "远距离邻居不产生分离力")
+	# 还原
+	ms.pos[0] = saved_pos0
+	ms.hp[0] = saved_hp0
+	ms.count = saved_count
+	ms._build_hash()
+
+	# —— LOS 仇恨：隔墙不索敌、同房间索敌（用 main 当前 dungeon；自造一张多房间图保证有墙）——
+	var d13b := ArpgDungeon.new()
+	d13b.generate(1, 4242)
+	while d13b.rooms.size() < 2:
+		d13b.generate(1, randi())
+	var r0: Rect2i = d13b.rooms[0]
+	var r1: Rect2i = d13b.rooms[1]
+	var in_a := d13b.random_cell_in(r0)
+	var in_a2 := d13b.random_cell_in(r0)
+	var in_b := d13b.random_cell_in(r1)
+	# 临时把 mob_system 的 dungeon 指到这张图（_los_clear 读的是它）
+	var saved_dungeon: ArpgDungeon = main.world.mobs.dungeon
+	main.world.mobs.dungeon = d13b
+	_check(main.world.mobs._los_clear(ArpgDungeon.cell_to_pos(in_a), ArpgDungeon.cell_to_pos(in_a2)) \
+		or in_a.distance_to(in_a2) < 3, "同房间视野通畅")
+	_check(not main.world.mobs._los_clear(ArpgDungeon.cell_to_pos(in_a), ArpgDungeon.cell_to_pos(in_b)), "跨房间（隔墙）视野受阻")
+	main.world.mobs.dungeon = saved_dungeon
+
+	# —— 路径拉直：用 main 自己的 dungeon（nav 建在它上面）——
+	var dm: ArpgDungeon = main.dungeon
+	var from_cell := dm.random_cell_in(dm.rooms[0])
+	var to_cell := dm.random_cell_in(dm.rooms[dm.rooms.size() - 1])
+	var from_p := ArpgDungeon.cell_to_pos(from_cell)
+	var to_p := ArpgDungeon.cell_to_pos(to_cell)
+	var raw: PackedVector2Array = main.party.nav_path(from_p, to_p)
+	var smooth: PackedVector2Array = main.party.smooth_path(from_p, raw)
+	_check(raw.size() > 0, "A* 路径非空（%d 点）" % raw.size())
+	_check(smooth.size() <= raw.size(), "拉直不增加路点（%d → %d）" % [raw.size(), smooth.size()])
+	if smooth.size() > 0:
+		_check(main.party.line_clear(from_p, smooth[0]), "拉直首点可视")
+
+	# —— 传送落点必可走（贴墙锚点）——
+	var wall_cell := Vector2i(-1, -1)
+	for x in d13.w:
+		for y in d13.h:
+			if not d13.is_floor(Vector2i(x, y)):
+				wall_cell = Vector2i(x, y)
+				break
+		if wall_cell.x >= 0:
+			break
+	_check(not main.party._is_open(wall_cell), "墙格判为不可走")
+	_check(main.party._is_open(main.party._nearest_open(wall_cell)), "最近可走格吸附有效")
+
 	if _failed:
 		quit(1)
 	else:

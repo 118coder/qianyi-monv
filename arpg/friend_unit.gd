@@ -176,8 +176,10 @@ func _physics_process(delta: float) -> void:
 		in_combat_until -= delta
 
 
-## AI 移动执行：沿寻路路点走
+## AI 移动执行：沿寻路路点走（新路径首拍做一次拉直：跳过可直视的中间点）
 func _ai_dir(_delta: float) -> Vector2:
+	if ai_path_i == 0 and ai_path.size() > 1 and main != null and main.party != null:
+		ai_path = main.party.smooth_path(position, ai_path)
 	if ai_path_i < ai_path.size():
 		var wp := ai_path[ai_path_i]
 		if position.distance_to(wp) < 22.0:
@@ -197,21 +199,32 @@ func _ai_dir(_delta: float) -> Vector2:
 
 
 ## 软分离：队友之间、与玩家之间保持个人空间（不叠影、不挡镜头、不挤门）
+## 含最近敌人：被怪贴脸时推开，不再与敌群叠影
 func _separation() -> Vector2:
 	var sep := Vector2.ZERO
+	var spread := float(ArpgPartyConfig.cfg("command")["follow"].get("spread", 52.0))
+	var r_friend := maxf(30.0, spread * 0.58)
 	if main.party != null:
 		for other in main.party.friends:
 			if other == self or not is_instance_valid(other) or other.dead:
 				continue
 			var d: Vector2 = position - other.position
 			var l: float = d.length()
-			if l < 30.0 and l > 0.01:
-				sep += d / l * (1.0 - l / 30.0)
+			if l < r_friend and l > 0.01:
+				sep += d / l * (1.0 - l / r_friend)
 	if main.player != null and main.player != self and is_instance_valid(main.player) and not main.player.dead:
 		var dp: Vector2 = position - main.player.position
 		var lp: float = dp.length()
 		if lp < 26.0 and lp > 0.01:
 			sep += dp / lp * (1.0 - lp / 26.0) * 1.4
+	# 敌人推离（1 次哈希查询；队友本就不该与怪重叠）
+	if world != null and world.mobs != null:
+		var mi: int = world.mobs.nearest(position, 40.0)
+		if mi >= 0:
+			var dm: Vector2 = position - world.mobs.pos[mi]
+			var lm: float = dm.length()
+			if lm < 28.0 and lm > 0.01:
+				sep += dm / lm * (1.0 - lm / 28.0) * 0.9
 	return sep.limit_length(1.2)
 
 

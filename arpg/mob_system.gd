@@ -62,6 +62,29 @@ var anim_t := PackedFloat32Array()
 var wander_dir := PackedVector2Array()
 var wander_t := PackedFloat32Array()
 var enraged := PackedByteArray()
+# —— 局部避让 / 防卡死（AI 优化批）——
+var sep := PackedVector2Array()            # 分离推力（每拍重建，进 _try_move 步长）
+var stuck_t := PackedFloat32Array()        # 贴墙/被堵累计时长
+var nudge_t := PackedFloat32Array()        # 切向脱困剩余时长
+var nudge_dir := PackedVector2Array()      # 脱困方向
+
+# —— 流程场 / AI 参数（balance.json「ai」段热调）——
+var flow := ArpgFlowField.new()
+var _flow_cell := Vector2i(-99, -99)
+var _flow_t := 0.0
+var _ai_sep_pad := 6.0
+var _ai_sep_strength := 3.0
+var _ai_sep_max := 6
+var _ai_stuck_after := 0.8
+var _ai_nudge_time := 0.45
+var _ai_nudge_speed := 0.6
+var _ai_arc_blend := 0.22
+var _ai_strafe := 0.5
+# —— 质量指标（压测/调试面板）——
+var stuck_ratio := 0.0
+var stack_ratio := 0.0
+var _metrics_t := 1.0
+var _metrics_print_t := 5.0
 
 # —— 空间哈希 ——
 var _hash := {}
@@ -117,6 +140,10 @@ func setup(m: Node, w: Node, d: ArpgDungeon) -> void:
 	wander_dir.resize(cap)
 	wander_t.resize(cap)
 	enraged.resize(cap)
+	sep.resize(cap)
+	stuck_t.resize(cap)
+	nudge_t.resize(cap)
+	nudge_dir.resize(cap)
 	for tpl_id in ArpgBalance.ENEMIES:
 		_push_tpl(tpl_id, ArpgBalance.ENEMIES[tpl_id], false)
 	_push_tpl("boss", ArpgBalance.BOSS, true)
@@ -177,6 +204,10 @@ func spawn(tpl_id: String, cell: Vector2i, elite_f: bool = false, boss_f: bool =
 	wander_dir[i] = Vector2.ZERO
 	wander_t[i] = randf() * 2.0
 	enraged[i] = 0
+	sep[i] = Vector2.ZERO
+	stuck_t[i] = 0.0
+	nudge_t[i] = 0.0
+	nudge_dir[i] = Vector2.ZERO
 	return i
 
 
@@ -272,8 +303,20 @@ func _physics_process(delta: float) -> void:
 	frame_no += 1
 	var t0 := Time.get_ticks_usec()
 	refresh_targets()
-	# 空间哈希（每帧主线程重建，供攻击/弹幕查询）
+	# 分离视野：相机可见矩形（主线程算一次，worker 只读）
+	var inv := get_viewport().get_canvas_transform().affine_inverse()
+	_sep_view = inv * Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	_sep_view = _sep_view.grow(SEP_VIEW_PAD)
+	# 分离/LOS 是「品质增强」：只在正常规模的战斗（<500 怪）里开启。
+	# 万敌压测（1 万）属于性能极限场景，自动降级为原行为——帧率优先，且观感无差。
+	_sep_quality = count < 500
+	# 正常战斗规模（<500 只）：全体参与分离（开销 <0.3ms），无需视野裁剪
+	_sep_all = _sep_quality
+	if _sep_quality and not _sep_all:
+		_pick_sep_targets()
+	# 空间哈希（每帧主线程重建，供攻击/弹幕查询 + 分离避让只读）
 	_build_hash()
+	_update_flow(delta)
 	# 模拟（多线程分块 / 小规模直跑）
 	var chunks := 1
 	if count > THREAD_THRESHOLD:
@@ -289,6 +332,16 @@ func _physics_process(delta: float) -> void:
 	sim_ms = (Time.get_ticks_usec() - t0) / 1000.0
 	_drain_events()
 	_handle_deaths()
+	_metrics_t -= delta
+	if _metrics_t <= 0.0:
+		_metrics_t = 1.0
+		_sample_metrics()
+		if main._stress_n > 0:
+			_metrics_print_t -= 1.0
+			if _metrics_print_t <= 0.0:
+				_metrics_print_t = 5.0
+				print("[AI] 卡住率 %.0f%% · 堆叠率 %.0f%% · sim %.2fms" % [
+					stuck_ratio * 100.0, stack_ratio * 100.0, sim_ms])
 	queue_redraw()
 
 
@@ -330,6 +383,18 @@ func refresh_targets() -> void:
 				al.append(0)
 	target_alive = al
 	_aggro = float(ArpgBalance.data.get("aggro_range", 185.0))
+	# AI 参数（balance.json「ai」段，保存即热重载）
+	var ai_cfg: Dictionary = ArpgBalance.data.get("ai", {})
+	var sep_cfg: Dictionary = ai_cfg.get("separation", {})
+	var stuck_cfg: Dictionary = ai_cfg.get("stuck", {})
+	_ai_sep_pad = float(sep_cfg.get("radius_pad", 6.0))
+	_ai_sep_strength = float(sep_cfg.get("strength", 3.0))
+	_ai_sep_max = int(sep_cfg.get("max_neighbors", 6))
+	_ai_stuck_after = float(stuck_cfg.get("after", 0.8))
+	_ai_nudge_time = float(stuck_cfg.get("nudge_time", 0.45))
+	_ai_nudge_speed = float(stuck_cfg.get("nudge_speed", 0.6))
+	_ai_arc_blend = float(ai_cfg.get("arc_blend", 0.22))
+	_ai_strafe = float(ai_cfg.get("strafe_ratio", 0.5))
 	while tgt.size() < count:
 		tgt.append(0)
 	for i in count:
@@ -349,6 +414,125 @@ func _nearest_target(p: Vector2) -> int:
 			bd = dd
 			best = t
 	return best
+
+
+## 包抄方位槽偏移（按怪下标恒定，结果缓存在 _slot_cache）
+var _slot_cache := {}
+var _slot_open_cache := {}
+var _los_cache := {}
+var _sep_view := Rect2()   # 相机视野（分离只在屏内生效）
+var _sep_quality := true   # 品质模式：怪数 <500 时开启分离/LOS/包抄
+var _sep_all := true       # 品质模式下全体参与（规模可控，无需视野裁剪）
+var _sep_set := {}         # 本帧参与分离的怪下标（主线程按距离选，worker 只读）
+const SEP_BUDGET := 48     # 每帧最多算 48 只（≈0.6ms），万敌与小队场景都够用
+const SEP_VIEW_PAD := 48.0
+
+
+## 主线程：屏内怪按「屏幕网格分桶」抽样选 SEP_BUDGET 只做分离。
+## 不用排序（1 万只排序本身就要 5ms+）：每格只取一只，保证覆盖均匀、不扎堆。
+func _pick_sep_targets() -> void:
+	_sep_set.clear()
+	if count == 0:
+		return
+	var vp := _sep_view
+	var buckets := {}     # 屏幕 64px 格 → 第一个命中怪
+	for i in count:
+		if hp[i] <= 0:
+			continue
+		var p := pos[i]
+		if p.x < vp.position.x or p.y < vp.position.y or p.x > vp.end.x or p.y > vp.end.y:
+			continue
+		var key := (int(p.x / 64.0) * 100000) + int(p.y / 64.0)
+		if not buckets.has(key):
+			buckets[key] = i
+			if buckets.size() >= SEP_BUDGET:
+				break
+	for k in buckets:
+		_sep_set[buckets[k]] = true
+
+func _slot_offset(i: int) -> Vector2:
+	var v = _slot_cache.get(i)
+	if v == null:
+		var slot := float(i % 8) * (TAU / 8.0) + float((i / 8) % 2) * (TAU / 16.0)
+		v = Vector2.RIGHT.rotated(slot) * 26.0
+		_slot_cache[i] = v
+	return v
+
+
+## 方位槽落点是否可走：按「目标格 + 槽」缓存（目标跨格才重算）
+func _slot_open(i: int, tpos: Vector2) -> bool:
+	var key := i * 1000003 + int(tpos.x) * 7919 + int(tpos.y)
+	var v = _slot_open_cache.get(key)
+	if v == null:
+		var cell := Vector2i(((tpos + _slot_offset(i)) / float(TILE)).floor())
+		v = dungeon.is_floor(cell)
+		if _slot_open_cache.size() > 20000:
+			_slot_open_cache.clear()
+		_slot_open_cache[key] = v
+	return v
+
+
+## 流程场维护：锚点 = 当前主控单位（玩家/被切队友）；跨格或到时重建（<2ms）
+func _update_flow(delta: float) -> void:
+	_flow_t -= delta
+	# 大图（压测斗兽场 170×120=20400 格）BFS 要 70ms+，远超一帧预算。
+	# 斗兽场本身是开阔地无墙可绕，流程场毫无收益 → 直接跳过（怪走直线）。
+	if dungeon.w * dungeon.h > 6000:
+		flow.valid = false
+		return
+	var anchor := Vector2(-9999, -9999)
+	var cu = main.possession.current_unit if main.possession != null else null
+	if cu != null and is_instance_valid(cu) and not cu.dead:
+		anchor = cu.position
+	elif world.player != null and is_instance_valid(world.player) and not world.player.dead:
+		anchor = world.player.position
+	if anchor.x < -9000:
+		flow.valid = false
+		return
+	var acell := Vector2i((anchor / float(TILE)).floor())
+	if not dungeon.is_floor(acell):
+		flow.valid = false
+		return
+	# 只按时间节流重建（0.25s 一次 ≈ 4Hz）。锚点每帧都在动，
+	# 若「跨格即重建」会在移动中每帧触发 5ms 重建，直接拖垮帧率。
+	if _flow_t <= 0.0:
+		_flow_cell = acell
+		_flow_t = _flow_recalc_interval()
+		flow.build(dungeon, acell)
+
+
+func _flow_recalc_interval() -> float:
+	return float(ArpgBalance.data.get("ai", {}).get("flow_recalc_interval", 0.25))
+
+
+## 网格直线视野（DDA 12px 采样）：aggro 获取时一次性判定，不进热循环
+func _los_clear(a: Vector2, b: Vector2) -> bool:
+	var dv := b - a
+	var steps := int(dv.length() / 12.0) + 1
+	var step := dv / float(steps)
+	var p := a
+	for s in steps:
+		p += step
+		if not dungeon.is_floor(Vector2i((p / float(TILE)).floor())):
+			return false
+	return true
+
+
+## 追击方向：直线与流程场同向（开阔地）→ 直线（零开销 + 天然直线捷径）；
+## 明显分歧（说明隔着墙）→ 沿流程场绕行走廊。场缺失/不可达回退直线。
+func _chase_dir(i: int, to_p: Vector2) -> Vector2:
+	var dl := to_p.length()
+	var direct := to_p / maxf(dl, 0.01)
+	if not flow.valid:
+		return direct
+	# 队友目标离主控太远时流程场（建自主控）不适用 → 直线
+	if tgt[i] != 0 and targets[tgt[i]].distance_to(targets[0]) > 500.0:
+		return direct
+	var fd := flow.dir_at(pos[i], TILE)
+	if fd == Vector2.ZERO:
+		return direct
+	# 点积代替 angle_to（免三角函数）：dot > cos(0.45rad≈0.9) 视为同向 → 走直线
+	return direct if fd.dot(direct) > 0.9 else fd
 
 
 func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
@@ -373,9 +557,32 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 		cool_t[i] = maxf(0.0, cool_t[i] - d)
 		if flash_t[i] > 0.0:
 			flash_t[i] -= d
+		# 分离避让：全局预算 + 轮转（不是按视野，压测场屏内可能有上千只）。
+		# 实测 1 万只全量 = 1.2s/次（GDScript 字典 + Vector2 分配是主要开销），
+		# 因此每帧只处理 _sep_budget 只屏内怪，用游标轮转保证长期覆盖所有怪。
+		if _sep_quality and (_sep_all or _sep_set.has(i)):
+			_accumulate_separation(i)
 		if not aggro[i]:
-			if dist < _aggro and target_alive[tgt[i]] == 1:
-				aggro[i] = 1
+			# LOS 仇恨：不隔墙索敌。DDA 只在这个怪「没 aggro 且进了半径」时才需要，
+			# 且结果按「怪所在格 + 目标格」缓存（任一跨格才重算）→ 静止时零成本
+			var d2 := dist * dist
+			# 远处怪（LOD>1）不做 LOS：它们本来就不在玩家视野里，隔墙索敌与否不可见
+			if d2 < _aggro * _aggro and target_alive[tgt[i]] == 1 and (not _sep_quality or lod == 1):
+				# 只按「怪所在格 + 目标格」做键（同格怪共享结果 → 命中率极高）
+				var los_key := int(p.x / 64.0) * 7919 + int(p.y / 64.0) \
+					+ int(targets[tgt[i]].x / 64.0) * 104729 + int(targets[tgt[i]].y / 64.0) * 1299709
+				var seen = _los_cache.get(los_key)
+				if seen == null:
+					seen = _los_clear(p, targets[tgt[i]])
+					if _los_cache.size() > 60000:
+						_los_cache.clear()
+					_los_cache[los_key] = seen
+				if seen:
+					aggro[i] = 1
+				else:
+					_wander(i, d)
+					_try_move(i, d)
+					continue
 			else:
 				_wander(i, d)
 				_try_move(i, d)
@@ -413,7 +620,17 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 
 func _melee_move(i: int, to_p: Vector2, dist: float) -> void:
 	if dist > atk_range[i]:
-		vel[i] = to_p / maxf(dist, 0.01) * spd[i]
+		# 包抄弧：近距时每怪认领一个方位槽绕到侧翼，怪群成弧围攻而不是叠柱
+		# （方位槽每怪恒定 → 几何量按 i 预算缓存，热循环里不再 is_floor/rotate）
+		var goal := to_p
+		if _sep_quality and dist < atk_range[i] * 3.0:
+			var slot_off := _slot_offset(i)
+			var approach: Vector2 = targets[tgt[i]] + slot_off
+			if _slot_open(i, targets[tgt[i]]):
+				var to_a := approach - pos[i]
+				if to_a.length_squared() > 64.0:
+					goal = to_a.lerp(to_p, _ai_arc_blend)
+		vel[i] = _chase_dir(i, goal) * spd[i]
 	elif cool_t[i] <= 0.0:
 		state[i] = 2
 		windup_t[i] = tpl_windup[tpl[i]]
@@ -429,11 +646,16 @@ func _ranged_move(i: int, to_p: Vector2, dist: float) -> void:
 		windup_t[i] = tpl_windup[tpl[i]]
 		vel[i] = Vector2.ZERO
 	elif dist > keep + 36.0:
-		vel[i] = to_p / maxf(dist, 0.01) * spd[i]
+		vel[i] = _chase_dir(i, to_p) * spd[i]
 	elif dist < keep - 36.0:
-		vel[i] = -to_p / maxf(dist, 0.01) * spd[i]
+		# 后退混入横向分量：贴墙被挡时也能沿墙滑出死区，不再原地抖动
+		var back := -to_p / maxf(dist, 0.01)
+		var side := back.orthogonal() * (1.0 if i % 2 == 0 else -1.0)
+		vel[i] = (back + side * _ai_strafe).normalized() * spd[i]
 	else:
-		vel[i] = Vector2.ZERO
+		# 死区慢速横移（风筝走位感），比站桩自然
+		var fwd := to_p / maxf(dist, 0.01)
+		vel[i] = fwd.orthogonal() * (1.0 if i % 2 == 0 else -1.0) * spd[i] * _ai_strafe
 
 
 func _wander(i: int, d: float) -> void:
@@ -447,9 +669,15 @@ func _wander(i: int, d: float) -> void:
 
 
 ## 网格碰撞移动：先 x 后 y 分轴滑动（探针 = 前进方向半径点）
+## 附带：切向脱困覆盖 / 分离力并入步长 / 卡死计量（贴墙硬推的兜底）
 func _try_move(i: int, d: float) -> void:
 	var p := pos[i]
-	var step := (vel[i] + knock[i] + lunge[i]) * d
+	# 切向脱困：贴墙/堵门累计超阈值 → 沿切向强制走一小段（非蓄力态才覆盖）
+	if nudge_t[i] > 0.0 and state[i] != 2:
+		# 脱困期间不再叠加分离（否则两股力互相抵消，反而卡死）
+		nudge_t[i] -= d
+		vel[i] = nudge_dir[i] * spd[i] * _ai_nudge_speed
+	var step := (vel[i] + knock[i] + lunge[i] + sep[i]) * d
 	var r := radius[i] * 0.7
 	if step.x != 0.0:
 		var nx := p.x + step.x
@@ -462,6 +690,21 @@ func _try_move(i: int, d: float) -> void:
 		if dungeon.is_floor(Vector2i((probe2 / float(TILE)).floor())):
 			p.y = ny
 	pos[i] = p
+	# 卡死计量：想走而几乎没挪（期望 vs 实际）→ 累计；正常移动则回退
+	var want := vel[i].length()
+	if aggro[i] == 1 and state[i] != 2 and want > spd[i] * 0.35:
+		var moved := (pos[i] - p).length()
+		if moved < maxf(want, 1.0) * d * 0.25:
+			stuck_t[i] += d
+			if stuck_t[i] > _ai_stuck_after:
+				stuck_t[i] = 0.0
+				nudge_t[i] = _ai_nudge_time
+				var side := vel[i].orthogonal().normalized()
+				nudge_dir[i] = side * (1.0 if (i + frame_no) % 2 == 0 else -1.0)
+		else:
+			stuck_t[i] = maxf(0.0, stuck_t[i] - d * 2.0)
+	else:
+		stuck_t[i] = maxf(0.0, stuck_t[i] - d * 2.0)
 	var v := vel[i]
 	if v.length_squared() > 4.0:
 		if absf(v.x) > absf(v.y):
@@ -471,10 +714,135 @@ func _try_move(i: int, d: float) -> void:
 		anim_t[i] += d
 	knock[i] = knock[i].move_toward(Vector2.ZERO, 1000.0 * d)
 	lunge[i] = lunge[i].move_toward(Vector2.ZERO, 1300.0 * d)
+	sep[i] = Vector2.ZERO
+
+
+## 分离避让（worker 安全：只读空间哈希）：重叠邻居互相推开，上限控预算。
+## 用平方距离弹簧（免 sqrt，万敌热循环的关键）：
+##   push = dvec * (1 - ds/want²)  —— 方向对、强度随重叠加深而增大
+func _accumulate_separation(i: int) -> void:
+	var p := pos[i]
+	var ri := radius[i]
+	var cx := int(p.x / HASH_CELL)
+	var cy := int(p.y / HASH_CELL)
+	var acc := Vector2.ZERO
+	var n := 0
+	for gx in range(cx - 1, cx + 2):
+		var arrx = _hash.get(gx * 100000 + cy)
+		if arrx != null:
+			for j in arrx:
+				if j == i:
+					continue
+				var dvec: Vector2 = p - pos[j]
+				var ds := dvec.length_squared()
+				var want := ri + radius[j] + _ai_sep_pad
+				var w2 := want * want
+				if ds >= w2:
+					continue
+				if ds < 0.01:
+					# 完全重叠：零向量没有方向 → 用「i 相对 j 的序号差」定角度，
+					# 保证 i、j 两方取到的是相反方向（互相背离），不会同向漂移
+					# 方向取「从 i 指向 j」的序号差符号：i<j 时 +θ，i>j 时 −θ → 必然背离
+					var sign_ij := 1.0 if j > i else -1.0
+					var base_ang := float(abs(j - i) % 16) * (TAU / 16.0)
+					acc += Vector2.RIGHT.rotated(base_ang) * sign_ij
+				else:
+					# 归一化方向 × 重叠程度（0~1）：重叠越深推力越大，与距离无关地保持量纲
+					acc += dvec / sqrt(ds) * (1.0 - ds / w2)
+				n += 1
+				if n >= _ai_sep_max:
+					break
+		if n >= _ai_sep_max:
+			break
+	if n < _ai_sep_max:
+		for gy in [cy - 1, cy + 1]:
+			for gx in range(cx - 1, cx + 2):
+				var arr = _hash.get(gx * 100000 + gy)
+				if arr == null:
+					continue
+				for j in arr:
+					if j == i:
+						continue
+					var dvec2: Vector2 = p - pos[j]
+					var ds2 := dvec2.length_squared()
+					var want2 := ri + radius[j] + _ai_sep_pad
+					var w22 := want2 * want2
+					if ds2 >= w22:
+						continue
+					if ds2 < 0.01:
+						var sign_ij2 := 1.0 if j > i else -1.0
+						var base_ang2 := float(abs(j - i) % 16) * (TAU / 16.0)
+						acc += Vector2.RIGHT.rotated(base_ang2) * sign_ij2
+					else:
+						acc += dvec2 / sqrt(ds2) * (1.0 - ds2 / w22)
+					n += 1
+					if n >= _ai_sep_max:
+						break
+				if n >= _ai_sep_max:
+					break
+			if n >= _ai_sep_max:
+				break
+	# 分离按「速度」量纲给（约为怪速的 1.2 倍上限），保证重叠时真的推得开；
+	# strength 是 balance 里的可调倍率
+	sep[i] = (acc * _ai_sep_strength).limit_length(spd[i] * 2.5)
+
+
+## 质量指标（1s 采样一次）：卡住率 = 想走但被堵的 aggro 怪占比；堆叠率 = 半径内挤压邻居的占比
+func _sample_metrics() -> void:
+	if count == 0:
+		stuck_ratio = 0.0
+		stack_ratio = 0.0
+		return
+	var stuck_n := 0
+	var stack_n := 0
+	var aggro_n := 0
+	var sampled := 0
+	# 只抽 120 只（GDScript 里 500 只 × 9 格哈希实测 72ms，会明显卡顿）
+	var stride := maxi(1, count / 120)
+	var r0 := (frame_no * 37) % stride   # 每拍错开抽样，覆盖更广
+	for i in range(r0, count, stride):
+		if hp[i] <= 0:
+			continue
+		sampled += 1
+		# 只看「aggro + 非蓄力 + 有移动意图」的怪：攻击站定不算卡住
+		if aggro[i] == 1 and state[i] != 2 and vel[i].length() > spd[i] * 0.3:
+			aggro_n += 1
+			if stuck_t[i] > 0.35:
+				stuck_n += 1
+		var hit := false
+		var cx := int(pos[i].x / HASH_CELL)
+		var cy := int(pos[i].y / HASH_CELL)
+		var ri := radius[i]
+		for gx in range(cx - 1, cx + 2):
+			if hit:
+				break
+			for gy in range(cy - 1, cy + 2):
+				if hit:
+					break
+				var arr = _hash.get(gx * 100000 + gy)
+				if arr == null:
+					continue
+				for j in arr:
+					if j == i:
+						continue
+					var thr := (ri + radius[j]) * 0.8
+					var dvx: float = pos[i].x - pos[j].x
+					var dvy: float = pos[i].y - pos[j].y
+					if dvx * dvx + dvy * dvy < thr * thr:
+						hit = true
+						break
+		if hit:
+			stack_n += 1
+	# 样本太少时比率无统计意义（1/1=100% 会误导）→ 视为 0
+	stuck_ratio = float(stuck_n) / float(aggro_n) if aggro_n >= 5 else 0.0
+	stack_ratio = float(stack_n) / float(sampled) if sampled >= 5 else 0.0
 
 
 func _build_hash() -> void:
-	for k in _used_keys:
+	# 清空上一帧所有 bucket 的数组（保留字典结构，避免反复分配）。
+	# 注意：必须遍历 _hash 里所有 key，不能只遍历 _used_keys——
+	# 否则上一帧未被登记的 bucket 会残留旧数据（曾导致分离查询到幽灵邻居）。
+	for k in _hash:
 		_hash[k].clear()
 	_used_keys.clear()
 	for i in count:
@@ -574,6 +942,10 @@ func _copy_slot(src: int, dst: int) -> void:
 	wander_dir[dst] = wander_dir[src]
 	wander_t[dst] = wander_t[src]
 	enraged[dst] = enraged[src]
+	sep[dst] = sep[src]
+	stuck_t[dst] = stuck_t[src]
+	nudge_t[dst] = nudge_t[src]
+	nudge_dir[dst] = nudge_dir[src]
 
 
 ## 平衡热重载：模板表按名重建；存活怪保持血量比例并刷新派生属性

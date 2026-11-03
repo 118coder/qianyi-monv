@@ -170,6 +170,14 @@ func _physics_process(delta: float) -> void:
 				var lsp: float = dsp.length()
 				if lsp < 28.0 and lsp > 0.01:
 					sep += dsp / lsp * (1.0 - lsp / 28.0)
+			# 与敌群也推开（AI 态玩家不再和怪叠影）
+			if world != null and world.mobs != null:
+				var mi: int = world.mobs.nearest(position, 40.0)
+				if mi >= 0:
+					var dm: Vector2 = position - world.mobs.pos[mi]
+					var lm: float = dm.length()
+					if lm < 28.0 and lm > 0.01:
+						sep += dm / lm * (1.0 - lm / 28.0) * 0.9
 			dir = (dir + sep).normalized() if (dir + sep).length_squared() > 0.001 else dir
 		if ai_want_attack:
 			ai_want_attack = false

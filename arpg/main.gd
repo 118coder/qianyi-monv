@@ -703,6 +703,9 @@ func _debug_rows() -> Array:
 	if arbiter != null and not arbiter.claims.is_empty():
 		out.append("拾取认领: %s" % str(arbiter.claims))
 	out.append("主控: %s" % (possession.current_unit.uid if possession != null and possession.current_unit != null else "?"))
+	if world != null and world.mobs != null:
+		out.append("AI 质量: 卡住 %.0f%% · 堆叠 %.0f%% · 敌群 %.2fms" % [
+			world.mobs.stuck_ratio * 100.0, world.mobs.stack_ratio * 100.0, world.mobs.sim_ms])
 	return out
 
 

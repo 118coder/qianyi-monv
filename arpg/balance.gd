@@ -237,6 +237,13 @@ static func defaults() -> Dictionary:
 		"max_floor": 5, "bag_cap": 20, "trap_chance": 0.45, "aggro_range": 185.0,
 		"elite_chance": 0.12, "death_loss": 0.5,
 		"elite_tint": [1.3, 1.15, 0.5],
+		"ai": {
+			"flow_recalc_interval": 0.25,
+			"separation": {"radius_pad": 10.0, "strength": 16.0, "max_neighbors": 6},
+			"stuck": {"after": 0.45, "nudge_time": 0.5, "nudge_speed": 0.6},
+			"arc_blend": 0.22,
+			"strafe_ratio": 0.5
+		},
 		"xp_base": 18, "xp_per_level": 14,
 		"floor_enemy_count_base": 5, "floor_enemy_count_per": 2,
 		"chars": {

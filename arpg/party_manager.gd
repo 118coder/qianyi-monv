@@ -131,6 +131,7 @@ func possessable() -> Array:
 
 
 ## 松散编队点：存活队友按序绕玩家均匀分布，避免挤门
+## 落点若在墙里（玩家贴墙时常见）→ 吸附最近可走格，避免每拍重算都指向墙内
 func formation_point(unit) -> Vector2:
 	var alive := alive_friends()
 	var idx: int = alive.find(unit)
@@ -139,7 +140,41 @@ func formation_point(unit) -> Vector2:
 	var dist := float(ArpgPartyConfig.cfg("command")["follow"]["follow_distance"])
 	var n := maxi(alive.size(), 1)
 	var ang := TAU * idx / n + PI * 0.25
-	return main.player.position + Vector2.RIGHT.rotated(ang) * dist
+	var p: Vector2 = main.player.position + Vector2.RIGHT.rotated(ang) * dist
+	var c := Vector2i((p / float(ArpgData.TILE)).floor())
+	if not _is_open(c):
+		return ArpgDungeon.cell_to_pos(_nearest_open(c))
+	return p
+
+
+func _is_open(c: Vector2i) -> bool:
+	return c.x >= 0 and c.y >= 0 and c.x < nav.size.x and c.y < nav.size.y and not nav.is_point_solid(c)
+
+
+## 网格直线视野（8px 采样）：供路径拉直 / 传送落点校验（对齐 autopilot 的做法）
+func line_clear(a: Vector2, b: Vector2) -> bool:
+	var dv := b - a
+	var steps := int(dv.length() / 8.0) + 1
+	var step := dv / float(steps)
+	var p := a
+	for s in steps:
+		p += step
+		if not _is_open(Vector2i((p / float(ArpgData.TILE)).floor())):
+			return false
+	return true
+
+
+## 拉直路径（string pulling）：从当前点能直视的最远路点开始走 → 少切角、少蹭墙
+func smooth_path(from: Vector2, pts: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if pts.is_empty():
+		return out
+	var i := 0
+	while i < pts.size() - 1 and line_clear(from, pts[i + 1]):
+		i += 1
+	for k in range(i, pts.size()):
+		out.append(pts[k])
+	return out
 
 
 ## 共享寻路（每层建一次 AStar；所有队友共用，查询预算由各自重拍间隔控制）

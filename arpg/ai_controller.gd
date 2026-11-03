@@ -207,9 +207,23 @@ func _stuck_check(unit, main, delta: float) -> void:
 			unit.ai_path = PackedVector2Array([unit.position + perp * 52.0])
 			unit.ai_path_i = 0
 		# 2.5s：传送归队（带特效反馈，读起来是有意的召回）
+		# 落点必须可走（主控贴墙时 (34,0) 会把人传进墙里 → 反复卡死）；
+		# 按队伍序号环形错开，避免多名队友传到同一点叠影
 		if _stuck_t > float(ArpgPartyConfig.cfg("stuck_teleport_after")):
 			_stuck_t = 0.0
-			unit.teleport_to(main.possession.current_unit.position + Vector2(34, 0))
+			var anchor: Vector2 = main.possession.current_unit.position
+			var slot := 0
+			if main.party != null:
+				slot = main.party.friends.find(unit)
+				if slot < 0:
+					slot = 0
+			var ang := float(slot) * (TAU / 6.0) + 0.4
+			var dest: Vector2 = anchor + Vector2.RIGHT.rotated(ang) * 34.0
+			if main.party != null:
+				var dc := Vector2i((dest / float(ArpgData.TILE)).floor())
+				if not main.party._is_open(dc):
+					dest = ArpgDungeon.cell_to_pos(main.party._nearest_open(dc))
+			unit.teleport_to(dest)
 			unit.state = "stuck"
 			if main.world != null:
 				main.world.spawn_nova(unit.position, Color(0.6, 0.85, 1.0))
