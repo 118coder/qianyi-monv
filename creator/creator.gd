@@ -29,9 +29,11 @@ func _ready() -> void:
 
 	ws.playtest_requested.connect(_playtest)
 	ws.dirty_changed.connect(_on_dirty)
+	ws.quit_requested.connect(func(): get_tree().quit())
 
 	DisplayServer.window_set_title("千亿魔女 · 创作工坊")
-	DisplayServer.window_set_min_size(Vector2i(1080, 700))
+	# 四区布局（左树 252 + 中央 + 右栏 322）的舒适下限
+	DisplayServer.window_set_min_size(Vector2i(1200, 760))
 
 
 ## 独立版：另起一个 Godot 进程跑主场景。创作器本身不退出，方便边改边看。

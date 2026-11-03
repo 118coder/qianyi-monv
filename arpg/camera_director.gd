@@ -149,7 +149,9 @@ func update(delta: float) -> void:
 		Shot.FOLLOW:
 			_step_follow(delta)
 		Shot.FOCUS_POINT:
-			rig.drive_to(delta, shot["pos"], _focus_rate)
+			# 把剩余演出时间传下去：定点镜头必须在 dur 内真正到位
+			rig.drive_to(delta, shot["pos"], _focus_rate,
+				maxf(0.05, float(shot["dur"]) - float(shot["t"])))
 		Shot.FOCUS_NODE:
 			_step_focus_node(delta, shot)
 		_:

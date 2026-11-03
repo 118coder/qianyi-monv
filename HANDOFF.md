@@ -1,6 +1,7 @@
 # 千亿魔女 · 交接文档（HANDOFF）
 
 > 最后更新：与本文档同一提交。**新会话/新开发者从这里开始读完即可接手。**
+> **下一轮先看 `docs/下一轮交接.md`** —— 那里是「未验证清单 + 待办优先级 + 硬约束」，本文是历史与架构。
 > 项目根：`E:\游戏制作` · Godot 4.7.2 · 单机商业游戏方向：露塞提娅式「店铺经营 + 地牢 ARPG」
 
 ---
@@ -8,8 +9,11 @@
 ## 1. 一页现状
 
 - **两条产品线一个仓库**：`arpg/`（主产品：地牢 ARPG，露塞提娅式）+ `srpg/`+`editor/`（战棋原型与地图编辑器，已可复用其地图管线）。战棋已完整可玩、测试全绿；**主产品是 ARPG**。
-- **已完成并验证**：地牢 ARPG 战斗闭环（3 职业/6 敌+Boss/随机地牢5层/宝箱陷阱/背包/升级/商店/任务/装备/存档v2/角色菜单）、AI 队友+主控切换+APC 框架、**敌我 AI 寻路/索敌系统升级**（✅ 2026-11-03，见 §9）、**多目标取景镜头 + 队友 AI 行为重做**（✅ 2026-11-03，见 §10）、万敌压测（10000 敌 95~135FPS）、手柄+震动、热重载（balance.json 保存即生效）、节点式事件编辑器+AI状态机可视化+系统数值面板、**事件引擎已接线**（✅ 2026-11-03 恢复，见 §2）、自动化测试（ARPG 冒烟 119 项 / 战旗 29 项 / 自动驾驶整局 PASS / 万敌基准 ≥50FPS）。
-- 编辑器本体 exe 不在仓库（见 §7）；启动用根目录的 4 个 .bat。
+- **已完成并实机验证（早期基线）**：地牢 ARPG 战斗闭环（3 职业/6 敌+Boss/随机地牢5层/宝箱陷阱/背包/升级/商店/任务/装备/存档v2/角色菜单）、AI 队友+主控切换+APC 框架、敌我 AI 寻路/索敌（§9）、万敌压测（10000 敌 95~135FPS）、手柄+震动、热重载（balance.json 保存即生效）、节点式事件编辑器+AI状态机可视化+系统数值面板、**事件引擎已接线**（§2）。
+- **已完成但只有静态验证（2026-11-03 五轮，全部未经实机）**：多目标取景镜头 + 队友 AI 重做（§10）、镜头双层的调度器（§11）、BSP 地牢 v2（§12）、金币/宝石掉落（§13）、小地图 + 战争迷雾（§14）、创作工坊双宿主（§17）、pixelfx 12 特效（§18）、图块场景编辑器（§19）、网格与图块解耦 + 大角色 footprint（§20）。
+  ⚠️ 这批只跑过 `--check-only` 与 `--headless --import`，**三层测试自 §2 之后没再重跑过**。逐项验证办法见 `docs/下一轮交接.md` §4。
+- **测试基线**：`smoke_arpg` 现 116 处 `_check`（旧记录里的 119/102 均已过期）、战旗 29 项、自动驾驶整局 PASS、万敌基准 ≥50FPS。这些数字是 §2 时代的，**下一轮必须重跑确认**。
+- 编辑器本体 exe 不在仓库（见 §7）；启动用根目录的 4 个 .bat，其中 `打开创作器.bat` 是可视化工作台（不依赖 Godot 编辑器）。
 
 ---
 
@@ -65,7 +69,32 @@ arpg/                      主产品（地牢 ARPG）
 ├── command_queue.gd       指令队列
 ├── autopilot.gd           全自动测试驾驶（--autoplay）
 ├── chest.gd               宝箱（陷阱箱）
-└── main.tscn              唯一场景（其余全代码构建）
+├── pxfx.gd                pixelfx 序列帧特效（读 fx_atlas.json，Sprite2D + hframes）
+├── scene_layer.gd         Node2D 容器脚本（_validate_property 隐藏无意义内置属性）
+├── ui_layer.gd            CanvasLayer 容器脚本（同上）
+├── editor_preview.gd      @tool 编辑器预览层（生成地牢并 _draw，运行时自毁）
+└── main.tscn              唯一场景（预置「世界/队伍/镜头/界面」容器）
+creator/                   可视化创作工坊（RPG Maker 式，独立于 Godot 编辑器）
+├── creator.gd             独立版外壳（窗口 + 起进程试玩）
+├── creator.tscn           独立版场景
+└── core/                  两宿主共享内核
+    ├── ui_kit.gd          控件工厂 / 主题 / 字段名中文化 / 等宽数字
+    ├── data_store.gd      原子写 + 3 份备份 + 写前校验 + 写完回读
+    ├── workspace.gd       六模块外壳（总览/数值/数据库/事件/关卡/场景）+ 脏标记
+    ├── event_editor.gd    事件编辑（触发器 + 命令链 + 分支，字段对齐 event_system）
+    ├── dungeon_view.gd    程序生成地牢预览
+    ├── tile_scene.gd      多图层图块数据 + JSON（tile_size / grid_size 分离）
+    ├── tile_canvas.gd     只画可见格的画布（缩放/平移/擦除/吸管）
+    └── tile_editor.gd     调色板 + 工具条 + 图层 + 撤销 + 图块集导入
+addons/
+├── qy_creator/            把创作工坊注册为编辑器主屏页；可隐藏 3D/资产库
+└── arpg_zh_editor/        检查器术语中文化（注入 godot.properties 域）
+tools/
+├── gh_pr.py               推分支 → 建 PR → 合并（复用 GitHub Desktop 凭据）
+├── build_pixelfx_fx.py    pixelfx 序列帧缩放 + 合并 atlas
+└── build_native.ps1       多语言骨架构建（缺工具链，未验证）
+native/ game_cs/ webui/    多语言骨架（C++ GDExtension / C# / WebView2，见 §15）
+vendor/pixelfx/            第三方特效库（MIT，266 个 JS 特效，含 .gdignore）
 core/                      与玩法无关的基座
 ├── events/event_system.gd 事件运行时 v2（嵌套IF/camera/wait/fx/music/give/win/lose）
 ├── settings/settings.gd   设置（user://settings.cfg，音量走总线）
@@ -74,10 +103,12 @@ core/                      与玩法无关的基座
 └── l10n/strings.gd        字符串表（L10n.text(key, fallback)）
 editor/                    地图/事件/AI/数值 编辑器（节点式事件图）
 srpg/                      战棋原型（完整可玩，与编辑器共用 map JSON 管线）
-docs/                      系统设计 + 本蓝图 + 交接文档
+docs/                      系统设计 + 蓝图 + 各子系统设计 + 下一轮交接
 tests/                     smoke(战旗29/ARPG87) + 自动驾驶 + 渲染验证脚本 + gen_balance
 assets/                    RPG Maker 素材（tiles/chars/fx/se/bgm）⚠️许可见 §7
-data/                      balance.json（全部数值）+ maps/map001.json（地图+事件）
+data/                      balance.json（37 段全部数值）+ maps/map001.json（地图+事件）
+                           scenes/（场景编辑器输出，行优先 int 数组，-1 为空）
+assets/fx/pxfx/            pixelfx 序列帧 + fx_atlas.json（12 个特效）
 ```
 
 ---
@@ -103,7 +134,9 @@ data/                      balance.json（全部数值）+ maps/map001.json（�
 
 ## 5. 工作流
 
-- **运行**：`运行游戏.bat`（或 F5）；**编辑器**：`打开编辑器.bat`（= exe 加 `-e`）
+- **运行**：`运行游戏.bat`（或 F5）；**Godot 编辑器**：`打开编辑器.bat`（= exe 加 `-e`）
+- **创作器**：`打开创作器.bat` —— RPG Maker 式工作台，改数值/数据库/事件/关卡参数/手搭场景，不依赖 Godot 编辑器
+  （Godot 编辑器里也有同名主屏页，两套宿主共用 `creator/core/`）
 - **测试**（全绿基线：ARPG 102 / 战旗 29 / 自动驾驶 PASS / 万敌基准 ≥50FPS）：
   ```
   "D:/Godot_v4.7.2/Godot_v4.7.2-stable_win64_console.exe" --headless --path "E:/游戏制作" -s res://tests/smoke_arpg.gd
@@ -113,7 +146,9 @@ data/                      balance.json（全部数值）+ maps/map001.json（�
   ```
 - **渲染验证 UI**：`--write-movie "<目录>\\x.png" --fixed-fps 10 --quit-after N -s res://tests/visual_ui.gd`（注意：movie 模式 HUD 的 FPS 数字是磁盘 IO 假象）
 - **热重载**：改 balance.json 保存即生效；地图改完按 F3；脚本按 F4 重开（或编辑器 F5 调试热替换）
-- **提交**：git 已初始化（远端 github.com/118coder/qianyi-monv 私有），`.godot/` 与 exe 已忽略
+- **提交**：`python tools/gh_pr.py pr --title "..." --body "..." --merge`（推分支 → 建 PR → 合并，一条命令）；
+  git 通道不通时 `python tools/gh_pr.py put --path ... --message ...` 走 Contents API。
+  凭据复用 GitHub Desktop（`git credential fill`），不落盘不回显。详见 `docs/提交与发布流程.md`
 
 ## 6. 踩坑清单（新会话必读）
 
@@ -129,14 +164,29 @@ data/                      balance.json（全部数值）+ maps/map001.json（�
    （`_tick_delta()` 取「距上次 think 的真实时长」）。
 9. **新脚本的 `class_name` 不在 `global_script_class_cache.cfg` 里**时，其它脚本直接引用类型会解析失败。
    跨脚本引用新类优先用 `const X := preload("res://...")`（`main.gd` 引 `camera_rig.gd` 即此做法）。
+10. **`.tscn` 的裸标识符是 ASCII-only**（`VariantParser` 用 `is_ascii_alphabet_char`）。中文 `@export` 变量名
+    一旦随场景保存就再也读不回（场景直接坏掉）。中文只能出现在**带引号的字符串**里（节点名 `"世界"` 可以），
+    变量必须是 ASCII，中文标签靠翻译域补。**踩过一次，写坏了 `main.gd`。**
+11. **检查器的属性名走独立翻译域**：`TranslationServer.add_translation()` 只写主域，
+    属性名在 `godot.properties`、编辑器 UI 在 `godot.editor`，必须 `get_or_add_domain()` 显式注入。
+12. **Container 会每帧重写子节点的 position**。入场动效只能动 `opacity`，动 `position` 会被立刻打回原位。
+13. **内部类不能引用外层脚本的 `class_name`**（加载阶段解析不到，报 Identifier not found）。
+    内部类需要外层数据时，把数据从外面传进去。
+14. **`EditorPlugin` 没有 `has_tool_menu_item()`**；`remove_tool_menu_item` 重复调用会报错，用标志位记录。
+    隐藏编辑器页签要按**文案**匹配而非下标，且必须**等两帧**（按钮文案是翻译后写入的，太早匹配不到）。
+15. **`--no-actor` 是 pixelfx 渲染的必加参数**，否则演示小人会被画进每一帧。
+16. **`vendor/pixelfx/.gdignore` 不能删**，否则编辑器会扫描几千个 JS 卡住。
+17. **`var x := scene.get_cell(...)` 这种无类型返回值推断会失败**，要显式 `var x: int =`。
+    凡是来自 Dictionary / 无类型对象的值，一律显式标注类型。
 
 ## 7. 路线图（详见 docs/商业架构蓝图.md）
 
-- **R1（下一批）**：~~P0 事件接线恢复~~（✅ 2026-11-03 完成，见 §2）→ **main.gd/hud.gd 拆分（流程状态机 + 每屏一脚本）** → 仓库分离决策（srpg/ 去留）
+- **R1（进行中）**：~~P0 事件接线恢复~~（✅ §2）→ ~~创作工具链~~（✅ §17~§19）→
+  **⚠️ 回归验证（下一轮第一优先，见 `docs/下一轮交接.md` §4）** → main.gd/hud.gd 拆分 → 仓库分离决策（srpg/ 去留）
 - **R2 玩法期**：经营主循环（天/租金/还债 + 店铺营业 MVP）→ 伤害管线（暴击/元素/状态效果）→ 内容校验扩展
 - **R3 内容期**：任务链/叙事/多地牢主题/成就/本地化执行
 - **R4 发布期**：Steam/无障碍/Demo
-- **待拍板**：队友背包独立 or 共享｜死亡惩罚强度｜srpg 去留｜付费形态
+- **待拍板**：手搭场景以什么形态进游戏（整层替换 / 预制房间 / 独立模式）｜队友背包独立 or 共享｜死亡惩罚强度｜srpg 去留｜付费形态
 
 ## 8. 关键决策记录
 
@@ -641,6 +691,7 @@ addons/qy_creator/  编辑器扩展：plugin.gd（注册主屏/精简页签/菜�
 ### 17.5 验证
 
 全部脚本 `--check-only` 通过；无残留旧路径。实机验证清单见文档 §6 的 9 项。
+
 ---
 
 ## 18. pixelfx 特效接入（2026-11-03）
@@ -659,3 +710,84 @@ addons/qy_creator/  编辑器扩展：plugin.gd（注册主屏/精简页签/菜�
 - **删掉的旧贴图**：Slash1 / ShockWave1 / ShockWaveRing1 / Ring / LightRing / Fog（含 .import）。
   **保留** Particle100（pixelfx 不提供单张粒子图，burst 仍在用）、Circle / Arrow（弹道，不是特效）。
 - **顺带修**：`EventEditor.setup()` 在 add_child 之前刷新导致三处 `get_children()` 打在 null 上。
+
+---
+
+## 19. 图块场景编辑器（2026-11-03，创作工坊第六模块）
+
+详见 `docs/场景编辑器.md`。**只存不改游戏**：场景存成 `data/scenes/scene001.json`，`ArpgWorld` 目前不加载它
+（接法有玩法决策，见 `docs/下一轮交接.md` §6 的 P1-1）。
+
+- **与「关卡」页的分工**：关卡页调程序生成地牢的**参数**（层号/种子/房间数），场景页**手工摆图块**。两者不重叠。
+- **图块集导入绕开 Godot 导入系统**：用 `Image.load()` 直接解码成 `ImageTexture`，
+  PNG 丢进 `assets/tiles/` 点「刷新」即可用，不必等 `.import` 生成或重启编辑器。
+- **画布只画可见格**：按 `off/zoom` 反算可见行列，200×150 的图也最多画一屏；`_draw` 事件驱动，静止零开销。
+  滚轮以鼠标为锚缩放、中键平移、右键擦、`Alt`+左键吸管。
+- **多图层**：增删/显隐/独立数据，绘制只作用于当前层；撤销按「一笔」记快照（一次拖动算一步），最多 40 步。
+- **数据格式刻意最朴素**：`width/height/tile_size/grid_size` + 每层一个行优先 `int` 数组，`-1` 为空。
+  将来游戏侧读它不需要任何转换层，序号直接反算 `region_rect`。
+- 交互打磨（PR #3）：工具按钮改用引用数组（原先靠 `get_parent().get_child(0)`，布局一改就废）；
+  切到本页时 `call_deferred("reset_view")`（`_ready` 阶段容器尺寸还是 0，`fit_view` 会被保护逻辑跳过）。
+
+---
+
+## 20. 网格与图块解耦 + 大角色 footprint（2026-11-03）
+
+详见 `docs/网格与图块方案.md`。起因是「32×32 网格不够用」，但真正的毛病不是数字小，
+而是**逻辑网格 / 美术图块 / 实体尺度被绑成了同一个常量**。
+
+### 20.1 三层坐标系
+
+```
+世界坐标 (px)   ← 渲染、碰撞、特效、镜头
+    ↑ ÷ grid
+逻辑网格 (grid)  ← 寻路、房间、走廊、小地图        【固定 32】
+    ↑ 仅渲染换算
+美术图块 (tile)  ← 图块集切分与绘制              【16/24/32/48/64 自由】
+```
+
+`ArpgData` 拆成 `GRID`（逻辑）+ `TILE_ART`（美术）+ `TILE := GRID` 别名，
+**53 处旧引用零改动**。新增 `ArpgData.src_rect(col, row, size)`，换图块尺寸不必再手写 `Rect2`。
+
+### 20.2 关键决策：网格不动
+
+网格缩一半 = A\* 节点 ×4（44×32 的图从 1408 变 5632），直接冲击万敌压测。
+而**放大角色根本不需要改网格** —— 让它占 2×2 格即可。所以 `GRID` 固定 32，尺寸需求由 footprint 消化。
+若将来真需要更粗的宏观网格，正确做法是加一层「区块」（若干格合并成房间单元），而不是把 A\* 粒度调粗。
+
+### 20.3 大角色四条规则
+
+| 规则 | 解决什么 | 实现 |
+|---|---|---|
+| 脚底锚点 | 对齐：16px 小怪与 96px Boss 站同一格时脚对脚 | sprite origin 在脚底中心 |
+| 半径独立 | 尺寸：`radius = 9 × scale`，与网格无关 | 已有 |
+| footprint 派生 | 通行：寻路时据此膨胀障碍 | `ceil(直径/32)` |
+| 走廊下限 | 生成：不出现「进不去的图」 | `generate(floor, seed, corridor)`，`main` 传 `maxi(2, max_footprint())` |
+
+分界点（`ceil(直径/32)`）：≤32 → 1×1；32~64 → 2×2（`scale ≥ 1.78`）；64~96 → 3×3（`scale ≥ 3.56`）。
+
+**零回归**：现有实体最大直径 27px（Boss 1.5），footprint 恒为 1，走廊仍 2 格。
+
+### 20.4 刻意没做
+
+**A\* clearance map 没接** —— 全 1×1 时是纯开销。方案已写进文档（换层时算一次 `byte[]`，几十 KB），
+等真有 2×2 实体再开。这不是遗漏。
+
+---
+
+## 21. 提交与发布路径（2026-11-03）
+
+详见 `docs/提交与发布流程.md`。**下一轮改完代码照这个走，不要再手敲 git 命令。**
+
+```bash
+python tools/gh_pr.py pr --title "feat: xxx" --body "..." --merge   # 推分支 → 建 PR → 合并
+python tools/gh_pr.py put --path docs/x.md --message "docs: 更新"    # git 不通时走 Contents API
+python tools/gh_pr.py status                                        # 查凭据身份 / 开放 PR
+```
+
+- **凭据**：复用 GitHub Desktop 登录留下的 Windows 凭据（`git credential fill`），不需要 PAT、不落盘、不回显。
+- **实测结论**：`git push` 通道本身可用（之前遇到的 502 是 `codeload.github.com` 与 `api.github.com`，
+  与 git 传输无关）。所以最优路径是 **git push 推分支 + API 建/合并 PR**，比逐文件 Contents API 快得多。
+- **网络抖动**：本轮 `api.github.com` 多次 502，脚本已自带「复用已有 PR」逻辑，退避重试即可，不会撞「PR 已存在」。
+- **`.gitignore` 要点**：`.workbuddy/`（本地记忆）、`native/build/`、`vendor/pixelfx/{docs,gallery,records}/`、
+  `game_cs/{bin,obj}/`、`webui/node_modules/`。

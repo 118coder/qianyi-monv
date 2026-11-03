@@ -231,6 +231,7 @@ const FIELD_ZH := {
 	"growth": "成长", "tpl": "模板", "weapon": "武器类型",
 	"atk_range": "攻击距离", "atk_cd": "攻击间隔", "proj_spd": "弹速",
 	"behavior": "行为", "cool": "冷却", "move": "移速", "faction": "阵营",
+	"windup": "前摇", "scale": "缩放", "xp": "经验",
 }
 
 ## 词根词典：完整词典没命中时按 `_` 拆词拼中文，避免满屏英文
@@ -607,3 +608,109 @@ static func _dict_editor(parent: Node, key: String, value: Dictionary, on_change
 static func _set_key(nv: Variant, container: Dictionary, key: String, on_change: Callable) -> void:
 	container[key] = nv
 	on_change.call(container)
+
+
+# ———————— RPG Maker 式右栏检查器 ————————
+# 参考形态：右栏是一列「▾ 区块头 + 缩进内容」的可折叠分组，
+# 区块头带分类色左缘，一眼能扫出分组边界。
+
+## 可折叠区块：仿 RPG Maker 右栏的「▾ 设置标题名称」。返回内容容器。
+static func inspector_section(parent: Node, title: String, color: Color = ACCENT, open0: bool = true) -> VBoxContainer:
+	var wrap := vbox(parent, 2)
+	var head := Button.new()
+	head.text = ("▾ " if open0 else "▸ ") + title
+	head.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	head.custom_minimum_size = Vector2(0, 30)
+	head.add_theme_font_size_override("font_size", 14)
+	var sb := _sb(PANEL_2, 0, 2, 8, 4)
+	sb.border_width_left = 3
+	sb.border_color = color
+	head.add_theme_stylebox_override("normal", sb)
+	var sbh := _sb(PANEL_3, 0, 2, 8, 4)
+	sbh.border_width_left = 3
+	sbh.border_color = color
+	head.add_theme_stylebox_override("hover", sbh)
+	head.add_theme_stylebox_override("pressed", sbh)
+	head.add_theme_stylebox_override("focus", _sb(Color(0, 0, 0, 0), 0, 2))
+	head.add_theme_color_override("font_color", TEXT)
+	head.add_theme_color_override("font_hover_color", Color(1, 1, 1))
+	head.add_theme_color_override("font_pressed_color", TEXT)
+	wrap.add_child(head)
+	var body := MarginContainer.new()
+	body.add_theme_constant_override("margin_left", 10)
+	body.add_theme_constant_override("margin_top", 2)
+	body.visible = open0
+	wrap.add_child(body)
+	var v := vbox(body, 7)
+	head.pressed.connect(func():
+		var now := not body.visible
+		body.visible = now
+		head.text = ("▾ " if now else "▸ ") + title
+	)
+	return v
+
+
+## 一行「标签 : 控件」，标签定宽对齐（检查器行距的统一来源）
+static func field_row(parent: Node, text: String, ctrl: Control, label_w: float = 112) -> HBoxContainer:
+	var h := hbox(parent, 8)
+	var l := label(h, text, 13, DIM)
+	l.custom_minimum_size.x = label_w
+	l.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	h.add_child(ctrl)
+	return h
+
+
+## 等宽 ID 徽章：RPG Maker 每个条目都有「0001」这样的编号感
+static func id_chip(parent: Node, text: String, color: Color = ACCENT) -> PanelContainer:
+	var p := PanelContainer.new()
+	var sb := _sb(PANEL_2, 1, 3, 8, 2)
+	sb.border_color = LINE
+	p.add_theme_stylebox_override("panel", sb)
+	mono_label(p, text, 12, color)   # mono_label 内部已挂进 p
+	parent.add_child(p)
+	return p
+
+
+## 预览卡片容器：发丝边框 + 面板底色，返回内部 VBox。
+## 面板横向撑满父容器（放在 ScrollContainer 里也不会缩成内容宽）。
+static func card(parent: Node, pad: int = 14) -> VBoxContainer:
+	var p := PanelContainer.new()
+	var sb := _sb(PANEL, 1, 6, pad, pad)
+	sb.border_color = LINE
+	p.add_theme_stylebox_override("panel", sb)
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(p)
+	return vbox(p, 8)
+
+
+## 菜单栏按钮（PopupMenu 深色样式已由 make_theme 提供）
+static func menu_button(parent: Node, text: String) -> MenuButton:
+	var b := MenuButton.new()
+	b.text = text
+	b.flat = true
+	b.custom_minimum_size = Vector2(0, 26)
+	b.add_theme_font_size_override("font_size", 13)
+	b.add_theme_color_override("font_color", TEXT)
+	b.add_theme_color_override("font_hover_color", Color(1, 1, 1))
+	b.add_theme_color_override("font_pressed_color", TEXT)
+	parent.add_child(b)
+	return b
+
+
+## 工具条扁平按钮（悬停才显底色，像 RPG Maker 顶栏）
+static func tool_button(parent: Node, text: String, cb: Callable, tip: String = "") -> Button:
+	var b := button(parent, text, cb)
+	b.flat = true
+	b.add_theme_font_size_override("font_size", 13)
+	b.custom_minimum_size = Vector2(0, 28)
+	if tip != "":
+		b.tooltip_text = tip
+	return b
+
+
+## 竖分隔细线（工具条内分组用）
+static func vsep(parent: Node, h: float = 20.0) -> void:
+	var c := ColorRect.new()
+	c.color = LINE
+	c.custom_minimum_size = Vector2(1, h)
+	parent.add_child(c)

@@ -28,6 +28,12 @@ func request(uid: String, item_id: int) -> bool:
 	return true
 
 
+## 换层清空全部认领：pickups 节点随楼层重建，掉落 ID 从 1 重新计数，
+## 上一层残留的认领会变成"幽灵占位"，让新楼层前 N 个掉落永远无法被 AI 认领。
+func clear() -> void:
+	claims.clear()
+
+
 ## 玩家拿走物品：清除任何认领（玩家优先级最高）
 func player_took(item_id: int) -> void:
 	if claims.has(item_id):

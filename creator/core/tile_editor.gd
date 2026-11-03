@@ -1,4 +1,4 @@
-extends HBoxContainer
+extends Control
 ## 场景编辑器（RPG Maker 式）：图块调色板 + 画布 + 场景/图层属性。
 ##
 ## 三条设计决定：
@@ -7,6 +7,12 @@ extends HBoxContainer
 ##  2. **画布无状态**。所有数据改动都经过本页，因为这里要同时处理撤销栈、脏标记、缩略图刷新。
 ##  3. **场景是纯数据**（宽高 + 若干图层的 int 数组），与游戏的地牢生成器完全解耦：
 ##     手搭的场景将来要进游戏，读的也是这份 JSON，不需要任何转换层。
+##
+## 四区布局接入：本类**不进场景树**（workspace 构造后调 setup()），
+## 两块对外容器由 workspace 分别安放：
+##   · canvas_area —— 调色板 + 工具条 + 画布 + 状态条 → 中央预览区；
+##   · props_panel —— 场景属性 + 图层 + 存档 → 右侧属性面板。
+## 快捷键（Ctrl+Z / Ctrl+Shift+Z / Ctrl+S）由 workspace 分发到 handle_key()。
 
 signal dirty()
 signal status(msg: String, level: int)
@@ -21,6 +27,9 @@ const SCENE_FILE := "res://data/scenes/scene001.json"
 const UNDO_MAX := 40
 ## 支持的图块尺寸。尺寸只影响渲染与切分，与逻辑网格解耦（见 docs/网格与图块方案.md）
 const TILE_SIZES := [16, 24, 32, 48, 64]
+
+var canvas_area: HBoxContainer
+var props_panel: VBoxContainer
 
 var scene = null
 var _canvas = null
@@ -43,25 +52,28 @@ var _tilesets: Array = []
 var _cur_tileset := ""
 
 
-func _ready() -> void:
-	add_theme_constant_override("separation", 10)
+## 代替 _ready：本类不进场景树，由 workspace 显式调用
+func setup() -> void:
 	scene = TileScene.new()
 	scene.setup_default()
+	canvas_area = HBoxContainer.new()
+	canvas_area.add_theme_constant_override("separation", 10)
+	props_panel = VBoxContainer.new()
+	props_panel.add_theme_constant_override("separation", 8)
 	_build_ui()
 	_scan_tilesets()
 	if _tilesets.size() > 0:
 		_load_tileset(str(_tilesets[0]))
-	_canvas.fit_view()
 	_refresh_layers()
 
 
 # ———————— 布局 ————————
 
 func _build_ui() -> void:
-	# 左：图块集与调色板
+	# 左（canvas_area 内）：图块集与调色板
 	var left := VBoxContainer.new()
-	left.custom_minimum_size.x = 204
-	add_child(left)
+	left.custom_minimum_size.x = 190
+	canvas_area.add_child(left)
 	UI.section(left, "图块集", UI.MOD_TILES)
 	_tileset_opt = OptionButton.new()
 	_tileset_opt.item_selected.connect(func(i):
@@ -97,10 +109,10 @@ func _build_ui() -> void:
 	left.add_child(_palette)
 	_brush_label = UI.mono_label(left, "笔刷：#0", 12, UI.DIM)
 
-	# 中：工具条 + 画布 + 状态条
+	# 中（canvas_area 内）：工具条 + 画布 + 状态条
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	add_child(mid)
+	canvas_area.add_child(mid)
 	var bar := UI.hbox(mid, 6)
 	for t in [["画笔", TileCanvas.TOOL_BRUSH], ["橡皮", TileCanvas.TOOL_ERASE], ["填充整层", TileCanvas.TOOL_FILL]]:
 		var b := Button.new()
@@ -133,10 +145,9 @@ func _build_ui() -> void:
 	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_zoom_label = UI.mono_label(bottom, "100%", 12, UI.DIM)
 
-	# 右：场景与图层
-	var right := VBoxContainer.new()
-	right.custom_minimum_size.x = 214
-	add_child(right)
+	# 右（props_panel）：场景与图层 → workspace 安放到右侧属性面板
+	var right := props_panel
+	right.custom_minimum_size.x = 240
 	UI.section(right, "场景", UI.MOD_TILES)
 	_name_edit = LineEdit.new()
 	_name_edit.text = scene.scene_name
@@ -330,7 +341,7 @@ func _import_tileset() -> void:
 		_load_tileset(dst)
 		_set_status("已导入 %s，立即可用" % p.get_file(), 1)
 	)
-	add_child(fd)
+	canvas_area.add_child(fd)
 	fd.popup_centered_ratio(0.6)
 
 
@@ -467,6 +478,24 @@ func _do_redo() -> void:
 
 # ———————— 存档 ————————
 
+func save_scene() -> void:
+	_save()
+
+
+## workspace 分发快捷键：Ctrl+Z / Ctrl+Shift+Z / Ctrl+S。返回是否消费。
+func handle_key(code: int, shift: bool) -> bool:
+	if code == KEY_Z:
+		if shift:
+			_do_redo()
+		else:
+			_do_undo()
+		return true
+	if code == KEY_S:
+		_save()
+		return true
+	return false
+
+
 func _save() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SCENE_DIR))
 	var f := FileAccess.open(SCENE_FILE, FileAccess.WRITE)
@@ -502,22 +531,6 @@ func _load() -> void:
 	_canvas.fit_view()
 	_redraw()
 	_set_status("已载入 %s" % SCENE_FILE, 1)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if not is_visible_in_tree():
-		return
-	if event is InputEventKey and event.pressed and event.ctrl_pressed:
-		var k := (event as InputEventKey).keycode
-		if k == KEY_Z:
-			if (event as InputEventKey).shift_pressed:
-				_do_redo()
-			else:
-				_do_undo()
-			get_viewport().set_input_as_handled()
-		elif k == KEY_S:
-			_save()
-			get_viewport().set_input_as_handled()
 
 
 # ———————— 调色板 ————————

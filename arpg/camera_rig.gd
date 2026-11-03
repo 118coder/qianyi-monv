@@ -41,6 +41,7 @@ var _vp := Vector2(1152, 648)
 var _primed := false
 var _tracked_n := 0
 var _last_written := Vector2.INF   # 上一次由本装置写入的 position（用于识别外部接管）
+var _no_edge_clamp := false        # 演出运镜期间允许中心贴边（画面仍被引擎 limit 夹在地图内）
 
 
 ## 每层/每张地图调用一次：读配置 + 重设边界（相机节点复用，不新建）
@@ -160,11 +161,23 @@ func follow(delta: float, focus: Node2D, friends: Array) -> void:
 
 
 ## 定点/过场：把取景中心快速推到某点（保留弹簧状态，镜头结束后回落无跳变）
-func drive_to(delta: float, pos: Vector2, rate: float = 9.0) -> void:
+## arrive_in > 0 时按「剩余演出时间」反推角速度与限速——演出必须真正到位，
+## 否则 2400px/s 的跟随限速会让远处定点镜头"全程在路上"，演完了都没到。
+func drive_to(delta: float, pos: Vector2, rate: float = 9.0, arrive_in: float = -1.0) -> void:
 	_zoom_target = base_zoom
 	_zoom = lerpf(_zoom, base_zoom, 1.0 - exp(-zoom_in_rate * delta))
 	zoom = Vector2.ONE * _zoom
-	_commit(delta, pos, maxf(rate, 0.5))
+	var w := maxf(rate, 0.5)
+	var ms := max_speed
+	if arrive_in > 0.0:
+		w = maxf(w, 6.0 / maxf(arrive_in, 0.05))
+		ms = maxf(ms, _center.distance_to(pos) / maxf(arrive_in, 0.05) * 2.5)
+	var saved := max_speed
+	max_speed = ms
+	_no_edge_clamp = true
+	_commit(delta, pos, w)
+	_no_edge_clamp = false
+	max_speed = saved
 
 
 ## 外部接管时（自己 tween 了 position）让内部状态跟上，避免接管结束的一瞬间回弹。
@@ -192,7 +205,7 @@ func _commit(delta: float, target_center: Vector2, omega: float = -1.0) -> void:
 			target_center = _center
 		var w: float = omega if omega > 0.0 else 2.0 / maxf(smooth_time, 0.04)
 		_center = _smooth_damp(_center, target_center, delta, w)
-	_clamp_limits()
+	_clamp_limits(delta)
 	position = _center
 	_last_written = position
 
@@ -214,19 +227,25 @@ func _smooth_damp(cur: Vector2, goal: Vector2, dt: float, omega: float) -> Vecto
 	return out
 
 
-## 与 Camera2D 的 limit 同口径再夹一次：否则引擎夹住 position 而 _center 继续外走 → 画面细碎抖动
-func _clamp_limits() -> void:
+## 与 Camera2D 的 limit 同口径约束中心：否则引擎夹住 position 而 _center 继续外走 → 画面细碎抖动。
+## 用**软拉回**（每帧把中心向合法区收敛一段）而不是硬夹：
+## 演出镜头结束后中心在界外，硬夹会瞬移 200+px；软拉回让它像正常追焦一样平滑回归。
+## 越界期间引擎侧 limit 仍把画面钉在边界，所以越界本身不可见。
+func _clamp_limits(delta: float = 1.0 / 60.0) -> void:
+	if _no_edge_clamp:
+		return
 	var half := _vp * 0.5 / maxf(_zoom, 0.01)
 	var lx: float = float(limit_left) + half.x
 	var rx: float = float(limit_right) - half.x
-	if lx <= rx:
-		_center.x = clampf(_center.x, lx, rx)
-	else:
-		_center.x = (float(limit_left) + float(limit_right)) * 0.5
 	var ty: float = float(limit_top) + half.y
 	var by: float = float(limit_bottom) - half.y
+	var pull := clampf(1.0 - exp(-10.0 * delta), 0.0, 1.0)
+	if lx <= rx:
+		_center.x += (clampf(_center.x, lx, rx) - _center.x) * pull
+	else:
+		_center.x = (float(limit_left) + float(limit_right)) * 0.5
 	if ty <= by:
-		_center.y = clampf(_center.y, ty, by)
+		_center.y += (clampf(_center.y, ty, by) - _center.y) * pull
 	else:
 		_center.y = (float(limit_top) + float(limit_bottom)) * 0.5
 
