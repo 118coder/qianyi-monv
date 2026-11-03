@@ -31,6 +31,7 @@ var _name_edit: LineEdit
 var _status: Label
 var _zoom_label: Label
 var _brush_label: Label
+var _tool_btns: Array = []
 
 var _undo: Array = []
 var _redo: Array = []
@@ -91,6 +92,7 @@ func _build_ui() -> void:
 		b.button_pressed = int(t[1]) == TileCanvas.TOOL_BRUSH
 		b.pressed.connect(_set_tool.bind(int(t[1])))
 		bar.add_child(b)
+		_tool_btns.append(b)
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(sp)
@@ -258,10 +260,15 @@ func _import_tileset() -> void:
 
 func _set_tool(t: int) -> void:
 	_canvas.tool = t
-	for c in _canvas.get_parent().get_child(0).get_children():
-		if c is Button and (c as Button).toggle_mode:
-			(c as Button).button_pressed = false
+	for i in _tool_btns.size():
+		(_tool_btns[i] as Button).button_pressed = (i == t)
 	_set_status({0: "画笔：左键画，右键擦", 1: "橡皮：左键擦除", 2: "填充：点一下填满整层"}.get(t, ""), 0)
+
+
+## 宿主切到本页时调用：此时容器已算出真实尺寸，适应窗口才有意义
+func reset_view() -> void:
+	if _canvas != null:
+		_canvas.fit_view()
 
 
 func _on_pick(idx: int) -> void:
