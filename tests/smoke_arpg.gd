@@ -279,7 +279,8 @@ func _run() -> void:
 	_check(flat.size() == 6, "画布铺平 %d 节点（含分支）" % flat.size())
 	var cam0: Vector2 = main.camera.position
 	await main.events._run_commands([{"cmd": "camera", "mode": "focus_cell", "cell": [2, 2], "dur": 0.3}])
-	_check(main.camera.position.distance_to(ArpgDungeon.cell_to_pos(Vector2i(2, 2))) < 300.0, "镜头调度命令生效")
+	var camdev: float = main.camera.position.distance_to(ArpgDungeon.cell_to_pos(Vector2i(2, 2)))
+	_check(camdev < 300.0, "镜头调度命令生效（起点距 %d，终偏差 %d）" % [int(cam0.distance_to(ArpgDungeon.cell_to_pos(Vector2i(2, 2)))), int(camdev)])
 	await main.events._run_commands([{"cmd": "wait", "time": 0.2}, {"cmd": "give_gold", "amount": 33}])
 	_check(main.rpg.gold >= 33, "等待/给金币命令")
 	var hp00: int = int(ArpgBalance.ENEMIES["imp"]["hp"])

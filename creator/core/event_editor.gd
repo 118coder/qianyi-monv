@@ -1,23 +1,30 @@
-extends HBoxContainer
-## 可视化事件编辑器（RPG Maker 式：左侧事件列表 / 中间命令链 / 右侧属性面板）。
+extends VBoxContainer
+## 事件编辑内核（RPG Maker 式）。字段定义与 `core/events/event_system.gd` 逐字一致
+## ——「界面上配得出来、运行时却没反应的字段，比不做更糟」是本文件的红线 #1。
 ##
-## 三条设计红线：
-##  1. **字段定义必须与 `core/events/event_system.gd` 的真实实现逐字一致**。
-##     比如 `camera` 用的是 mode/cell/dur，`wait` 用 time，`music` 用 track，
-##     `give_item` 用 tpl/count。界面上配得出来、运行时却没反应的字段，比不做更糟。
-##  2. **命令链是缩进列表而不是自由画布**。RPG Maker 的事件本来就是"触发器 + 命令序列"，
-##     用列表能保证语义唯一、顺序明确、不可能连出非法图；条件分支靠缩进表达，
-##     和用户在 RM 里形成的直觉一致。
-##  3. 只改内存里的字典，脏标记由外层控制；不在这里碰文件。
+## 本类自己渲染**底部事件条**（事件头 + 命令按钮条 + 线性命令列表），
+## 另外两块 UI 由宿主（workspace）安放：
+##   · get_canvas()   —— 节点流画布（EventCanvas），放中央预览区；
+##   · build_inspector(box) —— 事件/命令属性表单，填进工作区右栏。
+##
+## 数据结构（与运行时 event_system.gd 同源）：
+##   事件 = { name, once, condition{flag,equals}, trigger{type,...}, commands[...] }
+##   命令 = { cmd, ...字段 }；if 命令把分支挂在兄弟键 then / else 上
+##   寻址 = 混合路径 [链索引, "then", 索引, "else", 索引, ...]
+##
+## 红线 #2：命令链的**列表视图**保证语义唯一、顺序明确，不可能连出非法图；
+## 画布视图只是同一份数据的另一种看法，两处选择状态（sel_path）永远同步。
 
 signal changed
-## 请求预览某个命令（目前用于「镜头调度」定位到格子）
 signal preview_cell(cell: Vector2i)
+## 事件集合变化（新建/复制/删除/改名）→ 工作区重建左树
+signal structure_changed
 
 const UI := preload("res://creator/core/ui_kit.gd")
+const EventCanvas := preload("res://creator/core/event_canvas.gd")
 
 const DEPTH_INDENT := 22.0
-const MAX_DEPTH := 6           # 分支嵌套上限：再深人的阅读成本就超过收益了
+const MAX_DEPTH := 6           # 分支嵌套上限：再深的阅读成本就超过收益了
 
 ## 命令注册表。fields[].k 直接对应 JSON 里的键名。
 const CMDS := {
@@ -134,18 +141,18 @@ var items: Dictionary = {}
 
 var cur_event := -1
 var sel_path: Array = []
-var _dirty := false
 
 var _list_box: VBoxContainer
-var _chain_box: VBoxContainer
-var _insp_box: VBoxContainer
+var _head_lbl: Label
+var _canvas = null
+var _insp_bound: VBoxContainer = null    # 由 build_inspector 记住，结构操作后能原地重建
 
 
 func _ready() -> void:
-	add_theme_constant_override("separation", 10)
-	_build_layout()
-	# setup() 可能在本节点 add_child 之前就被调用（宿主要先构造再挂载），
-	# 那时 _list_box 等还是 null，刷新会被跳过；布局建好后在这里补一次。
+	add_theme_constant_override("separation", 6)
+	_build_strip()
+	if events.size() > 0 and cur_event < 0:
+		cur_event = 0
 	refresh_all()
 
 
@@ -162,99 +169,38 @@ func setup(evs: Array, balance: Dictionary) -> void:
 		refresh_all()
 
 
-func refresh_all() -> void:
-	_build_event_list()
-	_build_chain()
-	_build_inspector()
+## 中央画布（懒创建：workspace 路由到事件页时才需要）。
+## 不叫 get_canvas——那是 CanvasItem 的原生方法，重名会被引擎当重载报错。
+func flow_canvas() -> Control:
+	if _canvas == null:
+		_canvas = EventCanvas.new()
+		_canvas.title_of = func(c): return str(CMDS.get(str(c.get("cmd", "")), {}).get("zh", str(c.get("cmd", "?"))))
+		_canvas.lines_of = _node_lines
+		_canvas.color_of = func(c): return CMDS.get(str(c.get("cmd", "")), {}).get("col", Color(0.4, 0.4, 0.4))
+		_canvas.trigger_of = func(t): return {"title": _trigger_title(t), "lines": _trigger_lines(t)}
+		_canvas.node_selected.connect(func(p): _pick_cmd(p))
+		_canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		_canvas.set_event(_cur_ev())
+		_canvas.sel_path = sel_path
+	return _canvas
 
 
-# ———————— 布局 ————————
-
-func _build_layout() -> void:
-	# 左：事件列表
-	var left := UI.vbox(self, 6)
-	left.custom_minimum_size.x = 218
-	UI.section(left, "事件列表")
-	UI.hint(left, "一个事件 = 一个触发条件 + 一串命令。选中后在中栏编辑。")
-	var sc := ScrollContainer.new()
-	sc.custom_minimum_size.y = 0
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	left.add_child(sc)
-	_list_box = UI.vbox(sc, 3)
-	_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var acts := UI.hbox(left, 6)
-	UI.button(acts, "＋ 新建", _new_event, 100)
-	UI.button(acts, "复制", _dup_event, 56)
-	UI.button(acts, "删除", _del_event, 56)
-
-	# 中：命令链
-	var mid := UI.vbox(self, 6)
-	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UI.section(mid, "命令链（从上到下依次执行）")
-	var add_bar := UI.hbox(mid, 4)
-	add_bar.add_theme_constant_override("separation", 4)
-	for t in CMDS.keys():
-		var b := UI.button(add_bar, str(CMDS[t]["zh"]), _add_cmd.bind(str(t)))
-		b.add_theme_font_size_override("font_size", 12)
-		b.custom_minimum_size.y = 26
-	var chain_sc := ScrollContainer.new()
-	chain_sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	mid.add_child(chain_sc)
-	_chain_box = UI.vbox(chain_sc, 3)
-	_chain_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	# 右：属性面板
-	var right := UI.vbox(self, 6)
-	right.custom_minimum_size.x = 330
-	UI.section(right, "属性")
-	var insp_sc := ScrollContainer.new()
-	insp_sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	insp_sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_child(insp_sc)
-	_insp_box = UI.vbox(insp_sc, 8)
-	_insp_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+## 左树事件节点的显示文本
+func event_label(i: int) -> String:
+	if i < 0 or i >= events.size():
+		return "事件"
+	var ev: Dictionary = events[i]
+	return "%02d · %s" % [i + 1, str(ev.get("name", "未命名"))]
 
 
-# ———————— 事件列表 ————————
-
-func _build_event_list() -> void:
-	for c in _list_box.get_children():
-		c.queue_free()
-	if events.is_empty():
-		UI.hint(_list_box, "还没有事件。点「＋ 新建」开始。")
-		return
-	for i in events.size():
-		var ev: Dictionary = events[i]
-		var b := Button.new()
-		var tname := str(TRIGGERS.get(str(ev.get("trigger", {}).get("type", "")), {}).get("zh", "未知触发"))
-		b.text = "%d. %s\n　%s" % [i + 1, str(ev.get("name", "未命名")), tname]
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.add_theme_font_size_override("font_size", 12)
-		b.custom_minimum_size.y = 40
-		if i == cur_event:
-			b.add_theme_stylebox_override("normal", _sel_style())
-		b.pressed.connect(_pick_event.bind(i))
-		_list_box.add_child(b)
-
-
-func _sel_style() -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = Color(0.22, 0.33, 0.47)
-	s.border_width_left = 3
-	s.border_color = UI.ACCENT
-	s.content_margin_left = 8
-	s.content_margin_top = 4
-	s.content_margin_bottom = 4
-	return s
-
-
-func _pick_event(i: int) -> void:
-	cur_event = i
+func select_event(i: int) -> void:
+	cur_event = clampi(i, -1, events.size() - 1)
 	sel_path = []
 	refresh_all()
 
 
-func _new_event() -> void:
+func add_event() -> void:
 	events.append({
 		"name": "新事件 %d" % (events.size() + 1),
 		"once": true,
@@ -265,46 +211,216 @@ func _new_event() -> void:
 	cur_event = events.size() - 1
 	sel_path = []
 	_mark()
+	structure_changed.emit()
 	refresh_all()
 
 
-func _dup_event() -> void:
+func dup_event() -> void:
 	if cur_event < 0 or cur_event >= events.size():
 		return
 	var copy = events[cur_event].duplicate(true)
 	copy["name"] = str(copy.get("name", "事件")) + " 副本"
 	events.insert(cur_event + 1, copy)
 	cur_event += 1
+	sel_path = []
 	_mark()
+	structure_changed.emit()
 	refresh_all()
 
 
-func _del_event() -> void:
+func del_event() -> void:
 	if cur_event < 0 or cur_event >= events.size():
 		return
 	events.remove_at(cur_event)
 	cur_event = clampi(cur_event, 0, events.size() - 1)
 	sel_path = []
 	_mark()
+	structure_changed.emit()
 	refresh_all()
 
 
-# ———————— 命令链 ————————
+## 追加命令到当前链尾（sel_path 指向分支内时追加进那条分支）
+func add_cmd(t: String) -> void:
+	if cur_event < 0 or cur_event >= events.size():
+		_status("先新建一个事件")
+		return
+	var chain: Array = events[cur_event].get("commands", [])
+	if sel_path.size() > 0:
+		chain = _chain_at(sel_path.slice(0, sel_path.size() - 1))
+	chain.append(_make_cmd(t))
+	sel_path = []
+	_mark()
+	refresh_all()
 
-func _build_chain() -> void:
-	for c in _chain_box.get_children():
+
+## 在选中命令之后插入（列表视图没有的能力，画布右栏提供）
+func add_cmd_after(t: String) -> void:
+	if cur_event < 0 or cur_event >= events.size():
+		return
+	var node := _make_cmd(t)
+	if sel_path.is_empty():
+		var cmds: Array = events[cur_event].get("commands", [])
+		cmds.append(node)
+		sel_path = [cmds.size() - 1]
+	else:
+		var parent_path := sel_path.duplicate()
+		parent_path.resize(parent_path.size() - 1)
+		var chain := _chain_at(parent_path)
+		var idx := int(sel_path[-1])
+		var at := mini(idx + 1, chain.size())
+		chain.insert(at, node)
+		var np := parent_path.duplicate()
+		np.append(at)
+		sel_path = np
+	_mark()
+	refresh_all()
+
+
+## 往选中 if 命令的分支追加；选中的不是 if 时返回 false
+func add_into_branch(t: String, branch: String) -> bool:
+	if sel_path.is_empty() or cur_event < 0:
+		return false
+	var c := _node_at(sel_path)
+	if str(c.get("cmd", "")) != "if":
+		return false
+	if not (c.get(branch) is Array):
+		c[branch] = []
+	(c[branch] as Array).append(_make_cmd(t))
+	sel_path = sel_path + [branch, (c[branch] as Array).size() - 1]
+	_mark()
+	refresh_all()
+	return true
+
+
+func del_cmd() -> void:
+	if sel_path.is_empty() or cur_event < 0:
+		return
+	var chain := _chain_at(sel_path.slice(0, sel_path.size() - 1))
+	var idx := int(sel_path[-1])
+	if idx >= 0 and idx < chain.size():
+		chain.remove_at(idx)
+	sel_path = []
+	_mark()
+	refresh_all()
+
+
+func move_cmd(dir: int) -> void:
+	if sel_path.is_empty() or cur_event < 0:
+		return
+	var chain := _chain_at(sel_path.slice(0, sel_path.size() - 1))
+	var idx := int(sel_path[-1])
+	var j := idx + dir
+	if j < 0 or j >= chain.size():
+		return
+	var tmp = chain[idx]
+	chain[idx] = chain[j]
+	chain[j] = tmp
+	sel_path[-1] = j
+	_mark()
+	refresh_all()
+
+
+func refresh_all() -> void:
+	_build_head()
+	_build_list()
+	if _canvas != null:
+		_canvas.set_event(_cur_ev())
+		_canvas.sel_path = sel_path
+		_canvas.queue_redraw()
+	_rebuild_inspector()
+
+
+## 右栏属性表单：workspace 路由到事件页时调用
+func build_inspector(box: VBoxContainer) -> void:
+	_insp_bound = box
+	_rebuild_inspector()
+
+
+func _rebuild_inspector() -> void:
+	if _insp_bound == null or not is_instance_valid(_insp_bound) or not _insp_bound.is_inside_tree():
+		return
+	for c in _insp_bound.get_children():
+		_insp_bound.remove_child(c)
 		c.queue_free()
 	if cur_event < 0 or cur_event >= events.size():
-		UI.hint(_chain_box, "先选中或新建一个事件。")
+		UI.hint(_insp_bound, "左侧没有选中事件。到「事件」里新建一个。")
 		return
-	var cmds: Array = events[cur_event].get("commands", [])
+	if sel_path.is_empty():
+		_build_event_props(_insp_bound)
+	else:
+		_build_cmd_props(_insp_bound)
+
+
+# ———————— 底部事件条 ————————
+
+func _build_strip() -> void:
+	var head := UI.hbox(self, 8)
+	_head_lbl = UI.label(head, "未选择事件", 13, UI.DIM)
+	_head_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var bar := UI.hbox(self, 4)
+	bar.add_theme_constant_override("separation", 4)
+	UI.button(bar, "＋ 新建", add_event, 74).tooltip_text = "新建一个事件（触发条件 + 命令链）"
+	UI.button(bar, "复制", dup_event, 56)
+	UI.button(bar, "删除", del_event, 56)
+	UI.vsep(bar)
+	for t in CMDS.keys():
+		var b := UI.button(bar, str(CMDS[t]["zh"]), add_cmd.bind(str(t)))
+		b.add_theme_font_size_override("font_size", 12)
+		b.custom_minimum_size.y = 26
+
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(0, 150)
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	self.add_child(sc)
+	_list_box = UI.vbox(sc, 3)
+	_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+
+func _cur_ev() -> Variant:
+	if cur_event < 0 or cur_event >= events.size():
+		return null
+	return events[cur_event]
+
+
+func _build_head() -> void:
+	if _head_lbl == null:
+		return
+	var ev: Variant = _cur_ev()
+	if ev == null:
+		_head_lbl.text = "未选择事件——在左树「事件」里选，或点「＋ 新建」"
+		_head_lbl.add_theme_color_override("font_color", UI.DIM)
+		return
+	var e: Dictionary = ev
+	var tname := _trigger_title(e.get("trigger", {}))
+	var tags := PackedStringArray()
+	if bool(e.get("once", true)):
+		tags.append("只一次")
+	var cond: Dictionary = e.get("condition", {}) if e.get("condition") is Dictionary else {}
+	if str(cond.get("flag", "")) != "":
+		tags.append("前提:%s" % str(cond.get("flag", "")))
+	_head_lbl.text = "◆ %s　·　%s　%s" % [
+		str(e.get("name", "未命名")), tname,
+		("　" + "　".join(tags)) if tags.size() > 0 else ""]
+	_head_lbl.add_theme_color_override("font_color", UI.TEXT)
+
+
+func _build_list() -> void:
+	for c in _list_box.get_children():
+		c.queue_free()
+	var ev: Variant = _cur_ev()
+	if ev == null:
+		UI.hint(_list_box, "执行内容：事件被触发后从上到下依次执行的命令。")
+		return
+	var cmds: Array = (ev as Dictionary).get("commands", [])
 	if cmds.is_empty():
-		UI.hint(_chain_box, "这个事件还没有命令。用上方按钮添加第一条。")
+		UI.hint(_list_box, "还没有命令。点上方命令按钮添加第一条；条件分支会在列表里缩进。")
 		return
-	_rows(_chain_box, cmds, [], 0)
+	_rows(_list_box, cmds, [], 0)
 
 
-## 递归铺命令：分支用缩进表达，层次一眼可见
+## 递归铺命令：分支用缩进表达，层次一眼可见（列表视图；画布视图见 EventCanvas）
 func _rows(box: Node, cmds: Array, base: Array, depth: int) -> void:
 	for i in cmds.size():
 		var c: Dictionary = cmds[i]
@@ -318,7 +434,7 @@ func _rows(box: Node, cmds: Array, base: Array, depth: int) -> void:
 				var pad := Control.new()
 				pad.custom_minimum_size.x = DEPTH_INDENT * float(depth + 1)
 				h.add_child(pad)
-				var l := UI.label(h, "满足时 ↓", 11, UI.OK)
+				UI.label(h, "↳ 满足时", 11, UI.OK)
 				_rows(box, then_chain, path + ["then"], depth + 1)
 			var else_chain: Array = c.get("else", [])
 			if else_chain.size() > 0:
@@ -326,7 +442,7 @@ func _rows(box: Node, cmds: Array, base: Array, depth: int) -> void:
 				var pad2 := Control.new()
 				pad2.custom_minimum_size.x = DEPTH_INDENT * float(depth + 1)
 				h2.add_child(pad2)
-				UI.label(h2, "否则 ↓", 11, UI.ERR)
+				UI.label(h2, "↳ 否则", 11, UI.ERR)
 				_rows(box, else_chain, path + ["else"], depth + 1)
 
 
@@ -339,10 +455,10 @@ func _row(box: Node, c: Dictionary, path: Array, depth: int) -> void:
 	wrap.add_child(pad)
 
 	var b := Button.new()
-	b.text = "%s　%s" % [str(info.get("zh", c.get("cmd", "?"))), _summary(c)]
+	b.text = "◆ %s　%s" % [str(info.get("zh", c.get("cmd", "?"))), _summary(c)]
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.custom_minimum_size.y = 30
+	b.custom_minimum_size.y = 28
 	b.add_theme_font_size_override("font_size", 13)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(col.r * 0.30, col.g * 0.30, col.b * 0.34)
@@ -392,6 +508,34 @@ func _summary(c: Dictionary) -> String:
 	return ""
 
 
+# ———————— 寻址与数据操作 ————————
+
+func _make_cmd(t: String) -> Dictionary:
+	var node := {"cmd": t}
+	for f in CMDS.get(t, {}).get("fields", []):
+		node[str(f["k"])] = _default_of(f)
+	if t == "if":
+		node["then"] = []
+		node["else"] = []
+	return node
+
+
+func _default_of(f: Dictionary) -> Variant:
+	var d = f.get("def", null)
+	if d == null:
+		match str(f["t"]):
+			"int": return 0
+			"float": return 0.0
+			"bool": return false
+			"lines", "cells": return []
+			"cell", "vec2": return [0, 0]
+			"rect": return [0, 0, 3, 3]
+			_: return ""
+	if d is Array:
+		return (d as Array).duplicate(true)
+	return d
+
+
 func _chain_at(path: Array) -> Array:
 	var cur: Array = events[cur_event].get("commands", [])
 	var i := 0
@@ -420,105 +564,45 @@ func _node_at(path: Array) -> Dictionary:
 
 func _pick_cmd(path: Array) -> void:
 	sel_path = path
-	_build_chain()
-	_build_inspector()
+	_build_list()
+	if _canvas != null:
+		_canvas.sel_path = sel_path
+		_canvas.queue_redraw()
+	_rebuild_inspector()
 
 
-func _add_cmd(t: String) -> void:
-	if cur_event < 0 or cur_event >= events.size():
-		UI.hint(_insp_box, "先新建一个事件。")
-		return
-	var chain: Array = events[cur_event].get("commands", [])
-	if sel_path.size() > 0:
-		chain = _chain_at(sel_path.slice(0, sel_path.size() - 1))
-	var node := {"cmd": t}
-	for f in CMDS.get(t, {}).get("fields", []):
-		node[str(f["k"])] = _default_of(f)
-	if t == "if":
-		node["then"] = []
-		node["else"] = []
-	chain.append(node)
-	sel_path = []
-	_mark()
-	refresh_all()
+func _status(msg: String) -> void:
+	_head_lbl.text = msg
+	_head_lbl.add_theme_color_override("font_color", UI.WARN)
 
 
-func _default_of(f: Dictionary) -> Variant:
-	var d = f.get("def", null)
-	if d == null:
-		match str(f["t"]):
-			"int": return 0
-			"float": return 0.0
-			"bool": return false
-			"lines", "cells": return []
-			"cell", "vec2": return [0, 0]
-			"rect": return [0, 0, 3, 3]
-			_: return ""
-	if d is Array:
-		return (d as Array).duplicate(true)
-	return d
+# ———————— 右栏：事件属性 ————————
 
-
-func _del_cmd() -> void:
-	if sel_path.is_empty() or cur_event < 0:
-		return
-	var chain := _chain_at(sel_path.slice(0, sel_path.size() - 1))
-	var idx := int(sel_path[-1])
-	if idx >= 0 and idx < chain.size():
-		chain.remove_at(idx)
-	sel_path = []
-	_mark()
-	refresh_all()
-
-
-func _move_cmd(dir: int) -> void:
-	if sel_path.is_empty() or cur_event < 0:
-		return
-	var chain := _chain_at(sel_path.slice(0, sel_path.size() - 1))
-	var idx := int(sel_path[-1])
-	var j := idx + dir
-	if j < 0 or j >= chain.size():
-		return
-	var tmp = chain[idx]
-	chain[idx] = chain[j]
-	chain[j] = tmp
-	sel_path[-1] = j
-	_mark()
-	refresh_all()
-
-
-# ———————— 属性面板 ————————
-
-func _build_inspector() -> void:
-	for c in _insp_box.get_children():
-		c.queue_free()
-	if cur_event < 0 or cur_event >= events.size():
-		return
-	if sel_path.is_empty():
-		_build_event_props()
-	else:
-		_build_cmd_props()
-
-
-## 选中事件本身（未选命令）时：名字 / 触发条件 / 只触发一次 / 旗标前提
-func _build_event_props() -> void:
+## 选中事件本身（未选命令）时：名称 / 触发条件 / 只触发一次 / 旗标前提
+func _build_event_props(box: VBoxContainer) -> void:
 	var ev: Dictionary = events[cur_event]
 
-	UI.label(_insp_box, "事件属性", 15, UI.ACCENT)
-	UI.hsep(_insp_box)
-
-	UI.label(_insp_box, "名称", 13, UI.DIM)
+	var base := UI.inspector_section(box, "事件", UI.MOD_EVENTS)
 	var nm := LineEdit.new()
 	nm.text = str(ev.get("name", ""))
 	nm.text_changed.connect(func(t):
 		ev["name"] = t
 		_mark()
-		_build_event_list()
+		structure_changed.emit()
+		_build_head()
 	)
-	_insp_box.add_child(nm)
+	base.add_child(nm)
+	var once := CheckBox.new()
+	once.text = "只触发一次"
+	once.button_pressed = bool(ev.get("once", true))
+	once.toggled.connect(func(v):
+		ev["once"] = v
+		_mark()
+		_build_head()
+	)
+	base.add_child(once)
 
-	UI.hsep(_insp_box)
-	UI.label(_insp_box, "触发条件", 14, UI.TEXT)
+	var trig_sec := UI.inspector_section(box, "触发条件", UI.MOD_EVENTS)
 	var trig: Dictionary = ev.get("trigger", {})
 	var opt := OptionButton.new()
 	var types := TRIGGERS.keys()
@@ -537,26 +621,18 @@ func _build_event_props() -> void:
 		_mark()
 		refresh_all()
 	)
-	_insp_box.add_child(opt)
-
+	trig_sec.add_child(opt)
 	var tf: Array = TRIGGERS.get(cur_type, {}).get("fields", [])
 	for f in tf:
-		_field(_insp_box, trig, f, func():
+		_field(trig_sec, trig, f, func():
 			_mark()
-			_build_event_list()
+			_build_head()
+			_build_list()
+			if _canvas != null:
+				_canvas.queue_redraw()
 		)
 
-	UI.hsep(_insp_box)
-	var once := CheckBox.new()
-	once.text = "只触发一次"
-	once.button_pressed = bool(ev.get("once", true))
-	once.toggled.connect(func(v):
-		ev["once"] = v
-		_mark()
-	)
-	_insp_box.add_child(once)
-
-	UI.label(_insp_box, "触发前提（旗标，可留空）", 13, UI.DIM)
+	var cond_sec := UI.inspector_section(box, "触发前提（旗标，可留空）", UI.MOD_EVENTS, false)
 	var cond: Dictionary = ev.get("condition", {})
 	if not (cond is Dictionary):
 		cond = {}
@@ -567,8 +643,9 @@ func _build_event_props() -> void:
 	fl.text_changed.connect(func(t):
 		cond["flag"] = t
 		_mark()
+		_build_head()
 	)
-	_insp_box.add_child(fl)
+	cond_sec.add_child(fl)
 	var eq := CheckBox.new()
 	eq.text = "旗标为真时才触发"
 	eq.button_pressed = bool(cond.get("equals", true))
@@ -576,44 +653,141 @@ func _build_event_props() -> void:
 		cond["equals"] = v
 		_mark()
 	)
-	_insp_box.add_child(eq)
+	cond_sec.add_child(eq)
 
 
-## 选中某条命令时：按注册表生成字段表单 + 增删移
-func _build_cmd_props() -> void:
+# ———————— 右栏：命令属性 ————————
+
+## 选中某条命令时：按注册表生成字段表单 + 移动/删除/插入
+func _build_cmd_props(box: VBoxContainer) -> void:
 	var c := _node_at(sel_path)
 	if c.is_empty():
-		UI.hint(_insp_box, "命令已不存在，重新选一条。")
+		UI.hint(box, "命令已不存在，重新选一条。")
 		return
 	var t := str(c.get("cmd", ""))
 	var info: Dictionary = CMDS.get(t, {})
 
-	UI.label(_insp_box, "命令：" + str(info.get("zh", t)), 15, UI.ACCENT)
-	UI.hsep(_insp_box)
-
+	var sec := UI.inspector_section(box, "命令 · " + str(info.get("zh", t)), info.get("col", UI.ACCENT))
 	for f in info.get("fields", []):
-		_field(_insp_box, c, f, func(): _mark(); _build_chain())
+		_field(sec, c, f, func():
+			_mark()
+			_build_head()
+			_build_list()
+			if _canvas != null:
+				_canvas.queue_redraw()
+		)
 
-	UI.hsep(_insp_box)
-	var acts := UI.hbox(_insp_box, 6)
-	UI.button(acts, "↑ 上移", _move_cmd.bind(-1), 76)
-	UI.button(acts, "↓ 下移", _move_cmd.bind(1), 76)
-	UI.button(acts, "删除命令", _del_cmd, 88)
+	var ops := UI.inspector_section(box, "调整", UI.DIM)
+	var acts := UI.hbox(ops, 6)
+	UI.button(acts, "↑ 上移", move_cmd.bind(-1), 74)
+	UI.button(acts, "↓ 下移", move_cmd.bind(1), 74)
+	UI.button(acts, "删除", del_cmd, 62)
+	UI.hint(ops, "「在此后添加」会把新命令插到当前命令后面（主链或分支内都一样）。")
+	var ins := UI.hbox(ops, 4)
+	ins.add_theme_constant_override("separation", 4)
+	for t2 in CMDS.keys():
+		var b := UI.button(ins, str(CMDS[t2]["zh"]), add_cmd_after.bind(str(t2)))
+		b.add_theme_font_size_override("font_size", 12)
+		b.custom_minimum_size.y = 26
 
 	if t == "if":
-		UI.hsep(_insp_box)
-		UI.hint(_insp_box, "分支内容在中栏缩进的「满足时 / 否则」里继续添加：\n先选中分支里的某条命令再点「＋」，会插到同一层。")
-		var tb := UI.button(_insp_box, "＋ 往「满足时」加一条", func():
-			sel_path = sel_path + ["then"]
-			_add_cmd("dialogue")
+		UI.hsep(ops)
+		UI.hint(ops, "把命令加进分支：")
+		var hb := UI.hbox(ops, 4)
+		var tb := UI.button(hb, "＋ 满足时", func():
+			if not add_into_branch("dialogue", "then"):
+				_status("先选中一个「条件分支」命令")
 		)
 		tb.add_theme_font_size_override("font_size", 12)
-		var eb := UI.button(_insp_box, "＋ 往「否则」加一条", func():
-			sel_path = sel_path + ["else"]
-			_add_cmd("dialogue")
+		var eb := UI.button(hb, "＋ 否则", func():
+			if not add_into_branch("dialogue", "else"):
+				_status("先选中一个「条件分支」命令")
 		)
 		eb.add_theme_font_size_override("font_size", 12)
 
+
+# ———————— 画布用的节点文案 ————————
+
+## 触发器节点标题（ARPG 里 turn 就是楼层号，见 HANDOFF §2）
+func _trigger_title(trig: Dictionary) -> String:
+	match str(trig.get("type", "")):
+		"turn_start":
+			return "楼层开始 · 第%d层" % int(trig.get("turn", 1))
+		"unit_death":
+			var u := str(trig.get("unit", ""))
+			return "单位死亡 · %s" % ("任意" if u == "" else u)
+		"zone":
+			return "进入区域 · %s" % str(trig.get("faction", ""))
+	return "触发器"
+
+
+func _trigger_lines(trig: Dictionary) -> Array:
+	var out := []
+	match str(trig.get("type", "")):
+		"turn_start":
+			var ph := str(trig.get("phase", "any"))
+			out.append("时机：%s" % {"player": "玩家阶段", "enemy": "敌方阶段", "any": "任意阶段"}.get(ph, ph))
+		"unit_death":
+			var u := str(trig.get("unit", ""))
+			out.append("当%s死亡" % ("任意单位" if u == "" else u))
+		"zone":
+			var r: Array = trig.get("rect", [0, 0, 0, 0]) if trig.get("rect") is Array else [0, 0, 0, 0]
+			out.append("当%s进入区域 (%d,%d) %d×%d" % [
+				{"player": "我方", "enemy": "敌方", "any": "任意单位"}.get(str(trig.get("faction", "")), ""),
+				int(r[0]), int(r[1]), int(r[2]), int(r[3])])
+	return out
+
+
+## 命令节点的正文行（比列表摘要信息量大；移植自 editor/advanced_tabs.gd node_lines）。
+## 台词过长会被节点盒硬裁，统一截断加省略号。
+func _clip(s: String, n: int) -> String:
+	if s.length() <= n:
+		return s
+	return s.substr(0, n) + "…"
+
+
+func _node_lines(c: Dictionary) -> Array:
+	var out := []
+	match str(c.get("cmd", "")):
+		"dialogue":
+			var lines: Array = c.get("lines", [])
+			for i in mini(lines.size(), 3):
+				out.append("「%s」" % _clip(str(lines[i]), 22))
+			if lines.size() > 3:
+				out.append("… 共 %d 句" % lines.size())
+			if lines.is_empty():
+				out.append("（未写台词）")
+		"spawn":
+			out.append("增援 %s ×%d 处" % [c.get("tpl", "?"), (c.get("cells", []) as Array).size()])
+		"set_flag":
+			out.append("旗标 %s = %s" % [c.get("flag", "?"), "真" if bool(c.get("value", true)) else "假"])
+		"if":
+			out.append("条件：旗标 %s 为%s" % [c.get("flag", "?"), "真" if bool(c.get("equals", true)) else "假"])
+			out.append("是分支 %d 节点 / 否分支 %d 节点" % [(c.get("then", []) as Array).size(), (c.get("else", []) as Array).size()])
+		"camera":
+			out.append(("聚焦玩家" if str(c.get("mode", "")) == "focus_player" else "聚焦格子 %s" % str(c.get("cell", ""))) + " · %.1f 秒" % float(c.get("dur", 1.5)))
+		"wait":
+			out.append("等待 %.1f 秒" % float(c.get("time", 1.0)))
+		"fx":
+			out.append("演出特效：%s" % str(c.get("kind", "nova")))
+		"music":
+			out.append("BGM → %s" % c.get("track", "?"))
+		"give_gold":
+			out.append("给玩家金币 +%d" % int(c.get("amount", 0)))
+		"give_item":
+			out.append("给玩家 %s ×%d" % [c.get("tpl", "?"), c.get("count", 1)])
+		"heal_full":
+			out.append("全员回满生命")
+		"win":
+			out.append("★ 游戏立即胜利")
+		"lose":
+			out.append("★ 游戏立即失败")
+		_:
+			out.append("(未知命令)")
+	return out
+
+
+# ———————— 字段控件（注册表驱动，与旧版逐字对齐） ————————
 
 ## 按字段类型生成控件（含下拉框的选项来源）
 func _field(parent: Node, target: Dictionary, f: Dictionary, on_change: Callable) -> void:
@@ -796,5 +970,4 @@ func _rect_editor(parent: Node, target: Dictionary, k: String, on_change: Callab
 
 
 func _mark() -> void:
-	_dirty = true
 	changed.emit()

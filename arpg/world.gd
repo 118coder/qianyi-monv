@@ -53,6 +53,8 @@ func build(d: ArpgDungeon, m: Node) -> void:
 	drops = DropSystem.new()
 	drops.setup(self)
 	actors_root.add_child(drops)
+	if main != null and main.get("arbiter") != null:
+		main.arbiter.clear()   # 换层清认领：掉落 ID 重新计数，旧认领会变幽灵占位
 
 	fx_root = Node2D.new()
 	fx_root.z_index = 40
