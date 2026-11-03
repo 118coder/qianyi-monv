@@ -21,6 +21,7 @@ const UI := preload("res://creator/core/ui_kit.gd")
 const Store := preload("res://creator/core/data_store.gd")
 const EventEditor := preload("res://creator/core/event_editor.gd")
 const DungeonView := preload("res://creator/core/dungeon_view.gd")
+const TileEditor := preload("res://creator/core/tile_editor.gd")
 
 const LV_INFO := 0
 const LV_OK := 1
@@ -123,6 +124,7 @@ func _build_ui() -> void:
 		["database", "数据库", UI.MOD_DATABASE],
 		["events", "事件", UI.MOD_EVENTS],
 		["level", "关卡", UI.MOD_LEVEL],
+		["tiles", "场景", UI.MOD_TILES],
 	]
 	for m in modules:
 		var row := HBoxContainer.new()
@@ -178,6 +180,7 @@ func _build_pages() -> void:
 	_pages["database"].add_child(_make_database())
 	_pages["events"].add_child(_make_events())
 	_pages["level"].add_child(_make_level())
+	_pages["tiles"].add_child(_make_tiles())
 
 
 # ———————— 数据 ————————
@@ -274,6 +277,7 @@ func _switch(key: String) -> void:
 		"numbers": _refresh_num_list()
 		"database": _refresh_db_list()
 		"level": _refresh_level()
+		"tiles": pass
 	# 一次编排好的入场：切换模块时内容错峰浮现
 	UI.stagger_in(_pages[key])
 
@@ -670,6 +674,17 @@ func _apply_level() -> void:
 
 func _refresh_level() -> void:
 	_apply_level()
+
+
+# ———————— ⑥ 场景（图块搭建） ————————
+
+var _tiles
+
+func _make_tiles() -> Control:
+	_tiles = TileEditor.new()
+	_tiles.dirty.connect(_mark_dirty)
+	_tiles.status.connect(func(m: String, lv: int): _set_status(m, lv))
+	return _tiles
 
 
 # ———————— 键盘 ————————
