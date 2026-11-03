@@ -277,7 +277,10 @@ func _switch(key: String) -> void:
 		"numbers": _refresh_num_list()
 		"database": _refresh_db_list()
 		"level": _refresh_level()
-		"tiles": pass
+		"tiles":
+			# 等一帧让容器完成布局，再看要不要缩放适配
+			if _tiles != null:
+				_tiles.call_deferred("reset_view")
 	# 一次编排好的入场：切换模块时内容错峰浮现
 	UI.stagger_in(_pages[key])
 
