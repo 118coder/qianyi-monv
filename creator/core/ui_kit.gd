@@ -32,6 +32,7 @@ const MOD_NUMBERS := Color("e8873a")
 const MOD_DATABASE := Color("7fb069")
 const MOD_EVENTS := Color("8b7bd8")
 const MOD_LEVEL := Color("5fa8b8")
+const MOD_TILES := Color("c98f5e")   # 图块/砖土的暖褐，与"场景搭建"语义对应
 
 const FONT_NAMES := ["Microsoft YaHei UI", "Microsoft YaHei", "SimHei", "Noto Sans CJK SC"]
 ## 等宽：所有数字、坐标、种子都用它，读数时字符不会跳宽
