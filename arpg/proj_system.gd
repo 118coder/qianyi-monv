@@ -92,7 +92,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			# 敌方弹也会打队友（AI 队友/APC 同样处于危险中）
 			if world.main.party != null:
-				for f in world.party.friends:
+				for f in world.main.party.friends:
 					if is_instance_valid(f) and not f.dead and (f.position - pos[i]).length() < 15.0:
 						f.take_damage(dmg[i], pos[i])
 						alive[i] = 0

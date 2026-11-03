@@ -142,7 +142,7 @@ static func build_event_props(ed) -> void:
 	var ev: Dictionary = ed.events[ed.editing_event]
 	var path: Array = ed._sel_path
 	var is_trigger: bool = path.is_empty()
-	var node: Dictionary = ev["trigger"] if is_trigger else _node_at(ev["commands"], path)
+	var node: Dictionary = ev["trigger"] if is_trigger else node_at(ev["commands"], path)
 
 	ed.event_props.add_child(ed._lbl("— 节点属性 —"))
 	if is_trigger:
@@ -451,7 +451,7 @@ static func build_ai_page(ed) -> void:
 	right.add_theme_constant_override("separation", 6)
 	v.add_child(right)
 	ed.ai_params = right
-	var save := _btn("保存到 balance.json（游戏自动热重载）", func():
+	var save := _small_btn("保存到 balance.json（游戏自动热重载）", func():
 		ArpgBalance.save_to_file()
 		ed._set_status("已保存，游戏将自动热重载"))
 	v.add_child(save)
@@ -476,7 +476,7 @@ static func refresh_ai_page(ed) -> void:
 		var key: String = pair[0]
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 6)
-		var l := ed._lbl(pair[1])
+		var l: Label = ed._lbl(pair[1])
 		l.custom_minimum_size = Vector2(76, 0)
 		h.add_child(l)
 		var sp := SpinBox.new()
@@ -490,7 +490,7 @@ static func refresh_ai_page(ed) -> void:
 		ed.ai_params.add_child(h)
 	var gh := HBoxContainer.new()
 	gh.add_theme_constant_override("separation", 6)
-	var gl := ed._lbl("仇恨半径")
+	var gl: Label = ed._lbl("仇恨半径")
 	gl.custom_minimum_size = Vector2(76, 0)
 	gh.add_child(gl)
 	var gs := SpinBox.new()
@@ -564,7 +564,7 @@ static func build_systems_page(ed) -> void:
 	top.add_theme_constant_override("separation", 8)
 	v.add_child(top)
 	top.add_child(ed._lbl("改完点保存 → 游戏自动热重载（新刷出的单位用新值）"))
-	var save := _btn("保存到 balance.json", func():
+	var save := _small_btn("保存到 balance.json", func():
 		ArpgBalance.save_to_file()
 		ed._set_status("balance.json 已保存，游戏自动热重载"))
 	top.add_child(save)

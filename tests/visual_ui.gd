@@ -8,6 +8,7 @@ func _run() -> void:
 	root.add_child(main)
 	for i in 6:
 		await process_frame
+	main.events_silent = true   # 本脚本捕获各 UI 面：事件对话会暂停世界盖住画面
 	main.start_run("witch")
 	for i in 10:
 		await process_frame

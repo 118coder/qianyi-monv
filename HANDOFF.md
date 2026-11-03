@@ -8,68 +8,34 @@
 ## 1. 一页现状
 
 - **两条产品线一个仓库**：`arpg/`（主产品：地牢 ARPG，露塞提娅式）+ `srpg/`+`editor/`（战棋原型与地图编辑器，已可复用其地图管线）。战棋已完整可玩、测试全绿；**主产品是 ARPG**。
-- **已完成并验证**：地牢 ARPG 战斗闭环（3 职业/6 敌+Boss/随机地牢5层/宝箱陷阱/背包/升级/商店/任务/装备/存档v2/角色菜单）、AI 队友+主控切换+APC 框架、万敌压测（10000 敌 70FPS）、手柄+震动、热重载（balance.json 保存即生效）、节点式事件编辑器+AI状态机可视化+系统数值面板、自动化测试（ARPG 冒烟 87 项 / 战旗 29 项 / 自动驾驶整局 PASS）。
-- **🔴 唯一 P0 缺口**：`arpg/main.gd` 缺少**事件引擎接线**的 6 小段代码（约 60 行，详见 §3，恢复代码已写好可直接粘贴）。缺它的后果：balance.json 里写的**事件**（开场对话/增援/镜头演出）在游戏里不触发；编辑器做的事件无法试玩。**其余一切功能正常**（自动测试全绿不覆盖事件触发，所以此前未被发现）。
+- **已完成并验证**：地牢 ARPG 战斗闭环（3 职业/6 敌+Boss/随机地牢5层/宝箱陷阱/背包/升级/商店/任务/装备/存档v2/角色菜单）、AI 队友+主控切换+APC 框架、万敌压测（10000 敌 119FPS）、手柄+震动、热重载（balance.json 保存即生效）、节点式事件编辑器+AI状态机可视化+系统数值面板、**事件引擎已接线**（✅ 2026-11-03 恢复，见 §2）、自动化测试（ARPG 冒烟 102 项 / 战旗 29 项 / 自动驾驶整局 PASS / 万敌基准 ≥50FPS）。
 - 编辑器本体 exe 不在仓库（见 §7）；启动用根目录的 4 个 .bat。
 
 ---
 
-## 2. 🔴 P0：事件引擎接线恢复（10 分钟）
+## 2. ✅ P0 事件引擎接线（2026-11-03 已恢复）
 
-### 症状
-事件系统运行时（`core/events/event_system.gd`，类 `SrpgEventSystem`）完整且编译通过，但 `arpg/main.gd` 从未实例化它，也没有触发钩子。地图 JSON 里配置的事件不会在游戏中出现。
+**接线现状**（与本文档旧版恢复方案有三处有意差异，原因见各条）：
 
-### 恢复步骤（4 处改动）
+- `arpg/main.gd`：`events`/`map_events`/`ui`/`events_silent` 成员 + `over` 只读属性（事件引擎读 `main.over` 判局终）；`_ready` 末尾实例化 `SrpgEventSystem`；`start_run` 前 `_load_map_events()`（读 `SrpgMapLoader.load_file` 的 events 段）
+- **回合 → 楼层映射**：ARPG 没有回合，`build_floor()` 末尾的 `_intro()` 以 `floor_no` 当事件引擎的 turn（横幅"地下 N 层"→ `events.on_phase_start("player", floor_no)`）。地图事件 1（turn 1）= 开局对话；事件 2（turn 3）= 地下 3 层增援
+- `arpg/hud.gd`：新增 `show_banner`（淡入停留淡出）/ `show_dialogue`（逐行、空格/点击推进、**期间暂停世界**、头像查 `ArpgBalance.CHARS`，战棋讲者 id 经 `SPEAKER_ALIAS`（sword→fencer）映射）/ `update_turn`（save_system 读档回调）
+- `arpg/player.gd`：补 `faction := "player"` 与 `cell` 计算属性（事件引擎 zone 触发读取）
+- `spawn_units` 落点：地图事件格子对不上随机地牢地板时**就近改刷**在玩家所在房间（旧方案静默跳过会导致增援凭空消失）
+- **`events_silent` 闸门**：headless / `--autoplay` 下不触发事件对话（无真实键鼠输入，模态对话会挂死 CI）；`tests/visual_ui.gd` 里显式置真
+- 触发钩子：`_process` 玩家跨格 → `on_unit_moved(player)`（zone 事件，引擎内矩形过滤）；旧方案里 `_settle` 开头调 `events.on_reach_floor` 是**不存在的 API**（会编译失败），楼层事件由 `_intro` 的 `on_phase_start` 覆盖，无需恢复
+- 回归测试：`tests/smoke_arpg.gd` 第 12 节覆盖真实触发链路（on_phase_start/zone → give_gold/spawn 落点）
 
-**① `arpg/main.gd` 类成员区（`var player_combat_t := 0.0` 附近）加：**
-```gdscript
-var events: SrpgEventSystem
-```
+**同批顺带修复的预存缺陷**（此前被"测试没跑全"掩盖）：
+1. `editor/advanced_tabs.gd` 解析错误（`_node_at`/`_btn` 旧名 + `:=` 推断坑）→ 编辑器整个类加载失败，连带 ARPG 冒烟第 11 节崩溃
+2. `editor/editor.gd` 解析错误（`EventCanvas`→`EditorEventCanvas`、`_rebuild_event_form`→`EditorAdvancedTabs.build_event_props`）→ 战旗冒烟崩溃挂起
+3. `_ready` 里压测自动开局早于 rpg/save_sys/audio 基座创建 → `--stress/--bench` 直接崩溃（自动开局移到 `_ready` 末尾）
+4. `proj_system.gd:95` `world.party` 拼写错误（应为 `world.main.party`）→ 敌方弹幕在场时每帧报错
+5. `hud.game` 从未赋值 → 独立商店页 Nil 崩溃（现 `_ready` 里 `hud.game = self`）
 
-**② `arpg/main.gd` `_ready()` 中（`save_sys.setup(self)` 之后）加：**
-```gdscript
-	events = SrpgEventSystem.new(self)
-```
-
-**③ `arpg/main.gd` 加两个函数（事件入口 + 事件胜利/失败；放在 `_settle` 附近）：**
-```gdscript
-## 开局横幅后触发"回合开始"事件（开场对话等）
-func _intro() -> void:
-	await get_tree().create_timer(0.3).timeout
-	await ui.show_banner("第 %d 回合 · 玩家行动" % turn, Color(0.16, 0.32, 0.65))
-	await events.on_phase_start("player", turn)
-
-
-## 事件命令 win/lose 的落点
-func _game_over(win: bool) -> void:
-	_settle(win, "凯旋而归！" if win else "倒在了地牢里……",
-		"带着战利品返回了地面。" if win else "商品在逃亡中散失了一半。")
-
-
-## 事件命令 spawn 的落点（与压测刷怪共用世界）
-func spawn_units(tpl_id: String, cells: Array) -> void:
-	var tpl: Dictionary = ArpgBalance.ITEMS.get(tpl_id, {})
-	if ArpgBalance.ENEMIES.has(tpl_id):
-		for c in cells:
-			var cell := Vector2i(int(c[0]), int(c[1]))
-			if dungeon.is_floor(cell) and world != null:
-				world.spawn_mob(tpl_id, cell, false, false)
-				world.spawn_nova(ArpgDungeon.cell_to_pos(cell), Color(0.65, 0.9, 1.0))
-```
-**④ 触发钩子**（2 处）：
-- `_settle()` 开头加：`if events != null: events.on_reach_floor(floor_no)`（reach_floor 类事件的兜底；正常推进已由 build_floor 内 `quests.on_reach_floor` 覆盖任务侧）
-- 玩家格子变化时（`_process` 里缓存玩家 cell，变化即调）：
-```gdscript
-	if events != null and player != null and player.cell != _last_player_cell:
-		_last_player_cell = player.cell
-		events.on_unit_moved(player)
-```
-（成员 `var _last_player_cell := Vector2i(-99, -99)`；`on_unit_moved` 内部有 zone 矩形过滤，重复调用安全）
-
-### 验证
-- 冒烟已含：嵌套 IF/镜头调度/等待/给金币 均通过（见 tests/smoke_arpg.gd 第 11 节）
-- 手动：F5 开局应弹出开场对话（map001.json 事件 1）；把事件 1 的 turn 改成 2 可验证回合触发
-- 注意：`map001.json` 事件 2（第 3 回合增援）使用 `spawn`，走 §3 恢复代码里的 `spawn_units`
+### 验证（全绿基线：ARPG 102 / 战旗 29 / 自动驾驶 PASS / 万敌 119FPS）
+- 冒烟第 11 节（命令执行）+ 第 12 节（接线链路）均过
+- 手动：F5 开局约 1 秒后弹横幅 + 开场对话（witch 有头像，"sword" 经映射也是剑士头像）；对话期间世界暂停；地下 3 层触发增援事件
 
 ---
 
@@ -122,7 +88,7 @@ data/                      balance.json（全部数值）+ maps/map001.json（�
 | 玩家属性加成 | `player.eff_atk/eff_def`（读 `rpg.equip_bonus`） |
 | 掉落→背包→任务 | `pickup_system` → `main.try_pickup*` → `rpg.inventory.add` + `quests.on_pickup` |
 | 金币 | `rpg.gold`（怪物掉落在 on_mob_dead；商店买卖；事件 give_gold） |
-| 胜负 | 凯旋=Boss死→传送门→`_settle(true)`；团灭→`on_player_dead`→`_settle(false)`；事件 win/lose→`_game_over`（待恢复 §2） |
+| 胜负 | 凯旋=Boss死→传送门→`_settle(true)`；团灭→`on_player_dead`→`_settle(false)`；事件 win/lose→`_game_over`（✅已接线 §2） |
 | 存档 | `save_sys.save_game(slot)/load_game(slot)/slot_meta(slot)` |
 | 设置 | `settings.set_value(key, v)`（音量/震屏/震动即时生效） |
 | BGM | `audio.play_music("title/dungeon/town/boss")` |
@@ -134,7 +100,7 @@ data/                      balance.json（全部数值）+ maps/map001.json（�
 ## 5. 工作流
 
 - **运行**：`运行游戏.bat`（或 F5）；**编辑器**：`打开编辑器.bat`（= exe 加 `-e`）
-- **测试**（全绿基线：ARPG 87 / 战旗 29 / 自动驾驶 PASS）：
+- **测试**（全绿基线：ARPG 102 / 战旗 29 / 自动驾驶 PASS / 万敌基准 ≥50FPS）：
   ```
   "D:/Godot_v4.7.2/Godot_v4.7.2-stable_win64_console.exe" --headless --path "E:/游戏制作" -s res://tests/smoke_arpg.gd
   ... -s res://tests/smoke.gd
@@ -157,7 +123,7 @@ data/                      balance.json（全部数值）+ maps/map001.json（�
 
 ## 7. 路线图（详见 docs/商业架构蓝图.md）
 
-- **R1（下一批）**：P0 事件接线恢复（§2）→ main.gd/hud.gd 拆分（流程状态机 + 每屏一脚本）→ 仓库分离决策（srpg/ 去留）
+- **R1（下一批）**：~~P0 事件接线恢复~~（✅ 2026-11-03 完成，见 §2）→ **main.gd/hud.gd 拆分（流程状态机 + 每屏一脚本）** → 仓库分离决策（srpg/ 去留）
 - **R2 玩法期**：经营主循环（天/租金/还债 + 店铺营业 MVP）→ 伤害管线（暴击/元素/状态效果）→ 内容校验扩展
 - **R3 内容期**：任务链/叙事/多地牢主题/成就/本地化执行
 - **R4 发布期**：Steam/无障碍/Demo

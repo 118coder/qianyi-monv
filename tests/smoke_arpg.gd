@@ -276,7 +276,7 @@ func _run() -> void:
 	_check(not main.flags.has("d"), "未走的分支不执行")
 	var flat: Array = []
 	EditorAdvancedTabs.flatten(nested, 0, [], flat)
-	_check(flat.size() == 5, "画布铺平 %d 节点（含分支）" % flat.size())
+	_check(flat.size() == 6, "画布铺平 %d 节点（含分支）" % flat.size())
 	var cam0: Vector2 = main.camera.position
 	await main.events._run_commands([{"cmd": "camera", "mode": "focus_cell", "cell": [2, 2], "dur": 0.3}])
 	_check(main.camera.position.distance_to(ArpgDungeon.cell_to_pos(Vector2i(2, 2))) < 300.0, "镜头调度命令生效")
@@ -290,6 +290,29 @@ func _run() -> void:
 	main.world.mobs.apply_balance()
 	_check(EditorAdvancedTabs.ai_states(ArpgBalance.ENEMIES["imp"]).size() == 4, "AI 状态图节点")
 	_check(EditorAdvancedTabs.ai_states(ArpgBalance.BOSS).size() == 5, "Boss 状态图节点")
+
+	print("== 12. 事件引擎接线（main 侧触发链路） ==")
+	_check(main.events != null, "事件引擎已实例化")
+	_check(main.map_events.size() == 2, "地图 JSON 事件已载入（%d 条）" % main.map_events.size())
+	_check(main.over == false, "局未结束判定")
+	# 真实触发链路：on_phase_start → _fire → map_events 匹配 → 命令落点
+	main.map_events = [{"trigger": {"type": "turn_start", "phase": "player", "turn": 1},
+		"commands": [{"cmd": "give_gold", "amount": 50}]}]
+	var gold_a: int = main.rpg.gold
+	await main.events.on_phase_start("player", 1)
+	_check(main.rpg.gold == gold_a + 50, "回合事件触发 → give_gold 落点")
+	await main.events.on_phase_start("player", 2)
+	_check(main.rpg.gold == gold_a + 50, "回合不匹配不误触")
+	# zone 触发（玩家 faction/cell 上报）+ spawn 落点（暂停世界避免队友击杀干扰计数）
+	var mobs0: int = main.world.mob_count()
+	paused = true
+	main.map_events = [{"trigger": {"type": "zone", "rect": [0, 0, 9999, 9999], "faction": "player"},
+		"commands": [{"cmd": "spawn", "tpl": "orc", "cells": [[main.player.cell.x, main.player.cell.y]]}]}]
+	main.events.fired.clear()
+	await main.events.on_unit_moved(main.player)
+	_check(main.world.mob_count() == mobs0 + 1, "zone 事件触发 → spawn 落点（+1 敌）")
+	paused = false
+	main.map_events = []
 
 	if _failed:
 		quit(1)

@@ -17,6 +17,12 @@ const SFX := {
 }
 
 var state := State.SELECT
+
+## 事件引擎读：进入结算即「局已终」（事件 win/lose 与常规胜负共用此判据）
+var over: bool:
+	get:
+		return state == State.SETTLE
+
 var hud: ArpgHUD
 var world: ArpgWorld
 var player: ArpgPlayer
@@ -64,6 +70,14 @@ var player_combat_t := 0.0
 var event_camera_lock := false   # 事件镜头调度时锁定跟随
 var flags := {}                  # 事件旗标（set_flag/if 共用）
 
+# 事件引擎（core/events/event_system.gd，与战棋共用；接线见 docs/HANDOFF §2）
+var events: SrpgEventSystem
+var map_events := []             # 事件列表（地图 JSON 的 events 段）
+var ui: ArpgHUD                  # 事件系统经 main.ui 弹对话（沿用战棋命名）
+var events_silent := false       # CI/自动化置真：不触发事件对话（headless 无真实输入会挂起）
+var _last_player_cell := Vector2i(-99, -99)
+var _autoplay := false           # --autoplay 机器人测试
+
 # RPG 元系统（背包/金币/装备/任务/商店/存档）
 var rpg: ArpgRpgState
 var quests: ArpgQuestManager
@@ -83,6 +97,8 @@ func _ready() -> void:
 	_setup_input()
 	hud = ArpgHUD.new()
 	add_child(hud)
+	ui = hud
+	hud.game = self
 	hud.start_selected.connect(start_run)
 	hud.back_to_title.connect(_back_to_title)
 	hud.resume_requested.connect(_resume)
@@ -98,18 +114,13 @@ func _ready() -> void:
 			_bench_s = float(a.split("=")[1])
 		elif a == "--stress-fx":
 			_stress_fx = true
-	# 压测/基准自动开局（跳过选人，保证 CI 可复现）
+	# 压测/基准/自动驾驶的自动开局统一放 _ready 末尾（rpg/save_sys/audio 基座就绪之后）
+	_autoplay = "--autoplay" in OS.get_cmdline_user_args()
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--friends="):
 			_friends_n = clampi(int(a.split("=")[1]), 0, 64)
 		elif a == "--apc":
 			_want_apc = true
-	if _stress_n > 0:
-		start_run("fencer")
-	elif "--autoplay" in OS.get_cmdline_user_args():
-		var bot := ArpgAutopilot.new()
-		bot.main = self
-		add_child(bot)
 	# 队友节点容器（挂 main 下：换层不销毁；z=5 保证在世界地板/敌群之上可见）
 	party_root = Node2D.new()
 	party_root.y_sort_enabled = true
@@ -129,12 +140,22 @@ func _ready() -> void:
 	shop.setup(self)
 	save_sys = ArpgSaveSystem.new()
 	save_sys.setup(self)
+	events = SrpgEventSystem.new(self)
+	# headless / 自动驾驶没有真实键鼠输入，事件对话会无限等待 → 一律静默
+	events_silent = DisplayServer.get_name() == "headless" or _autoplay
 	settings = ArpgSettings.new()
 	add_child(settings)
 	audio = ArpgAudioManager.new()
 	audio.setup(self)
 	add_child(audio)
 	audio.play_music("title")
+	# 压测/基准自动开局（跳过选人，保证 CI 可复现）；自动驾驶机器人挂载
+	if _stress_n > 0:
+		start_run("fencer")
+	elif _autoplay:
+		var bot := ArpgAutopilot.new()
+		bot.main = self
+		add_child(bot)
 
 
 ## 用代码注册输入映射（免改 project.godot）：键盘 + Xbox/PS 手柄通用语义键位
@@ -252,6 +273,7 @@ func start_run(id: String) -> void:
 		party.friends.clear()
 	hud.hide_select()
 	hud.hide_pause()
+	_load_map_events()
 	build_floor()
 	if _stress_n == 0:
 		_recruit_party()
@@ -362,6 +384,27 @@ func build_floor() -> void:
 	quests.on_reach_floor(floor_no)
 	audio.play_music("boss" if dungeon.boss_floor else "dungeon")
 	_hud_static()
+	if _stress_n == 0:
+		_intro()
+
+
+## 地图 JSON 只取事件列表（重开一局 / F3 重载本层都会重新读取）
+func _load_map_events() -> void:
+	var mdict: Dictionary = SrpgMapLoader.load_file(SrpgMapLoader.PATH)
+	map_events = mdict.get("events", [])
+
+
+## 楼层开场：横幅后触发「回合开始」事件（楼层号 = 事件引擎的回合数：
+## 地图事件 1 = turn 1 开场对话；事件 2 = turn 3 增援，在地下 3 层触发）
+func _intro() -> void:
+	if events_silent:
+		return
+	await get_tree().create_timer(0.3).timeout
+	if state != State.PLAY:
+		return
+	await hud.show_banner("地下 %d 层" % floor_no, Color(0.16, 0.32, 0.65))
+	if events != null:
+		await events.on_phase_start("player", floor_no)
 
 
 func _hud_static() -> void:
@@ -462,6 +505,12 @@ func _process(delta: float) -> void:
 			if it == "potion":
 				potions += 1
 		hud.update_bars(player, bag.size(), potions, floor_no, dungeon.boss_floor)
+
+	# 事件钩子：玩家跨格触发 zone 事件（引擎内有矩形/阵营过滤，重复调用安全）
+	if events != null and not events_silent and player != null \
+			and is_instance_valid(player) and player.cell != _last_player_cell:
+		_last_player_cell = player.cell
+		events.on_unit_moved(player)
 
 
 ## 顿帧：短暂压低时间流速，用「真实时间」计时恢复（挂起世界一瞬，强调命中）
@@ -820,6 +869,28 @@ func on_player_dead() -> void:
 	play_sfx("die")
 	add_shake(0.6)
 	_settle(false, "倒在了地下 %d 层……" % floor_no, "商品在逃亡中散失了一半。")
+
+
+# ———————— 事件引擎落点（core/events/event_system.gd 调用） ————————
+
+## 事件命令 win / lose 的落点
+func _game_over(win: bool) -> void:
+	_settle(win, "凯旋而归！" if win else "倒在了地牢里……",
+		"带着战利品返回了地面。" if win else "商品在逃亡中散失了一半。")
+
+
+## 事件命令 spawn 的落点（与压测刷怪共用世界）。
+## 地图事件的格子对不上随机地牢地板（可能是墙）时，就近改刷在玩家所在房间的地板上。
+func spawn_units(tpl_id: String, cells: Array) -> void:
+	if world == null or not ArpgBalance.ENEMIES.has(tpl_id):
+		return
+	var anchor := player.position if player != null else ArpgDungeon.cell_to_pos(dungeon.start_cell)
+	for c in cells:
+		var cell := Vector2i(int(c[0]), int(c[1]))
+		if not dungeon.is_floor(cell):
+			cell = dungeon.random_cell_in(_near_room(anchor))
+		world.spawn_mob(tpl_id, cell, false, false)
+		world.spawn_nova(ArpgDungeon.cell_to_pos(cell), Color(0.65, 0.9, 1.0))
 
 
 func _back_to_title() -> void:

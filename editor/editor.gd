@@ -318,7 +318,7 @@ func _make_event_page() -> Control:
 	cscroll.custom_minimum_size = Vector2(520, 240)
 	cscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	flow.add_child(cscroll)
-	event_canvas = EditorAdvancedTabs.EventCanvas.new()
+	event_canvas = EditorAdvancedTabs.EditorEventCanvas.new()
 	event_canvas.ed = self
 	cscroll.add_child(event_canvas)
 	var pscroll := ScrollContainer.new()
@@ -568,7 +568,7 @@ func _canvas_left(c: Vector2i) -> void:
 						break
 				if not found:
 					cells.append([c.x, c.y])
-				_rebuild_event_form()
+				EditorAdvancedTabs.build_event_props(self)
 
 
 func _canvas_right(c: Vector2i) -> void:
@@ -666,7 +666,7 @@ func _finish_zone(end_cell: Vector2i) -> void:
 	events[editing_event]["trigger"]["rect"] = [x1, y1, w, h]
 	cur_tool = EdTool.TERRAIN
 	_refresh_event_list()
-	_rebuild_event_form()
+	EditorAdvancedTabs.build_event_props(self)
 	_set_status("区域已设置")
 
 

@@ -14,8 +14,14 @@ var main: Node
 var world: Node
 
 var uid := "player"
+var faction := "player"      # 事件引擎 zone 触发按阵营过滤
 var uname := ""
 var command := "follow"
+
+## 事件引擎（zone 触发）用：实时换算所在格（main._process 跨格时上报）
+var cell: Vector2i:
+	get:
+		return Vector2i((position / float(ArpgData.TILE)).floor())
 var command_queue: ArpgCommandQueue
 var ai: ArpgAIController          # 被切下主控时的大脑（与队友同一套）
 var state := "idle"               # 调试面板用

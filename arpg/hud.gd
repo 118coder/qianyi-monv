@@ -59,6 +59,17 @@ var toast_label: Label
 
 var _logs := []
 
+# 事件 UI（横幅 / 对话框；事件系统经 main.ui 调用）
+var banner_root: Control
+var banner_bg: ColorRect
+var banner_label: Label
+var dlg_panel: PanelContainer
+var dlg_portrait: TextureRect
+var dlg_name: Label
+var dlg_text: Label
+var dlg_active := false
+var _dlg_adv := false
+
 # ———————— 设计 token（Operate 模式：克制度为底线，语义色统一） ————————
 const C_SURFACE := Color(0.07, 0.09, 0.15, 0.94)
 const C_SURFACE2 := Color(0.11, 0.13, 0.21, 0.94)
@@ -71,6 +82,9 @@ const C_TEXT_DIM := Color(0.72, 0.77, 0.88)
 const C_DANGER := Color(0.92, 0.38, 0.32)
 const C_SUCCESS := Color(0.5, 0.9, 0.6)
 const C_BORDER := Color(1, 1, 1, 0.07)
+
+## 事件对话讲者沿用战棋角色 id → ARPG 角色 id（剑士在战棋叫 sword）
+const SPEAKER_ALIAS := {"sword": "fencer"}
 
 
 func _style_box(bg: Color, radius: int = 8, border: bool = false) -> StyleBoxFlat:
@@ -152,6 +166,8 @@ func _ready() -> void:
 	_build_menu_ui()
 	_build_shop_ui()
 	_build_toast()
+	_build_banner()
+	_build_dialogue()
 
 
 ## 队伍面板：可滚动，支持任意 N（需求书 §5.7）
@@ -221,6 +237,17 @@ func _build_menu_ui() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if dlg_active:
+		var adv := false
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			adv = true
+		elif event is InputEventKey and event.pressed and not event.echo \
+				and event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
+			adv = true
+		if adv:
+			get_viewport().set_input_as_handled()
+			_dlg_adv = true
+			return
 	if menu_root != null and menu_root.visible:
 		if event.is_action_pressed("char_menu") or event.is_action_pressed("ui_cancel"):
 			game._menu_close()
@@ -742,6 +769,112 @@ func show_boss_bar(show_it: bool, ratio: float, boss_name_text: String) -> void:
 	boss_box.visible = show_it
 	boss_bar.value = ratio
 	boss_name.text = boss_name_text
+
+
+# ———————— 事件 UI（横幅 / 对话框） ————————
+
+## 存档读档回调（core/save/save_system）：层号刷到顶栏（事件引擎把楼层当回合）
+func update_turn(n: int, phase: String) -> void:
+	floor_label.text = "地下 %d 层 · %s" % [n, phase]
+
+
+func _build_banner() -> void:
+	banner_root = Control.new()
+	banner_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	banner_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner_root.visible = false
+	root.add_child(banner_root)
+	banner_bg = ColorRect.new()
+	banner_bg.anchor_right = 1.0
+	banner_bg.anchor_top = 0.40
+	banner_bg.anchor_bottom = 0.54
+	banner_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner_root.add_child(banner_bg)
+	banner_label = _label(26, C_TEXT)
+	banner_label.anchor_right = 1.0
+	banner_label.anchor_bottom = 1.0
+	banner_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	banner_root.add_child(banner_label)
+
+
+## 楼层/事件横幅：淡入停留淡出（事件序列 await 本函数结束再继续）
+func show_banner(text: String, col: Color) -> void:
+	banner_label.text = text
+	banner_bg.color = Color(col.r, col.g, col.b, 0.82)
+	banner_root.visible = true
+	banner_root.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(banner_root, "modulate:a", 1.0, 0.18)
+	tw.tween_interval(0.65)
+	tw.tween_property(banner_root, "modulate:a", 0.0, 0.22)
+	await tw.finished
+	banner_root.visible = false
+	banner_root.modulate.a = 1.0
+
+
+func _build_dialogue() -> void:
+	dlg_panel = _panel_box()
+	dlg_panel.anchor_left = 0.5
+	dlg_panel.anchor_right = 0.5
+	dlg_panel.anchor_top = 1.0
+	dlg_panel.anchor_bottom = 1.0
+	dlg_panel.offset_left = -420
+	dlg_panel.offset_right = 420
+	dlg_panel.offset_top = -186
+	dlg_panel.offset_bottom = -20
+	dlg_panel.visible = false
+	root.add_child(dlg_panel)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 12)
+	dlg_panel.add_child(h)
+	dlg_portrait = TextureRect.new()
+	dlg_portrait.custom_minimum_size = Vector2(96, 96)
+	dlg_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	dlg_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	dlg_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	h.add_child(dlg_portrait)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 4)
+	h.add_child(v)
+	dlg_name = _label(15, C_ACCENT)
+	v.add_child(dlg_name)
+	dlg_text = _label(14, C_TEXT)
+	dlg_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dlg_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(dlg_text)
+	v.add_child(_label(11, C_TEXT_DIM, "空格 / 点击 · 继续"))
+
+
+## 事件对话框：逐行显示、等输入推进；期间暂停世界（退出时恢复原暂停态）
+func show_dialogue(speaker_id: String, lines: Array) -> void:
+	if lines.is_empty():
+		return
+	var sid: String = SPEAKER_ALIAS.get(speaker_id, speaker_id)
+	var tpl: Dictionary = ArpgBalance.CHARS.get(sid, {})
+	if tpl.is_empty():
+		dlg_portrait.visible = false
+		dlg_name.text = "旁白"
+	else:
+		dlg_portrait.visible = true
+		var at := AtlasTexture.new()
+		at.atlas = load(str(tpl["sprite"][0]))
+		at.region = Rect2(float(tpl["sprite"][1]), float(tpl["sprite"][2]), 48, 48)
+		dlg_portrait.texture = at
+		dlg_name.text = str(tpl["name"])
+	dlg_panel.visible = true
+	dlg_active = true
+	var was_paused := get_tree().paused
+	get_tree().paused = true
+	for line in lines:
+		dlg_text.text = str(line)
+		_dlg_adv = false
+		while not _dlg_adv:
+			await get_tree().process_frame
+	dlg_active = false
+	dlg_panel.visible = false
+	get_tree().paused = was_paused
 
 
 # ———————— 角色选择 ————————
