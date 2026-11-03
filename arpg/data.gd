@@ -2,12 +2,23 @@ class_name ArpgData
 ## ARPG 数值表（对应策划案 §10 可调参数表）：
 ## 角色 / 敌人 / 物品 / 地牢结构 / 宝箱陷阱 / 成长曲线，全部集中在这一个文件里调平衡。
 
-const TILE := 32
+## 逻辑网格：寻路 / 碰撞 / 房间 / 小地图的坐标单元。
+## ⚠️ 不要为了「换图块尺寸」改它 —— 图块与网格已经解耦（见 docs/网格与图块方案.md）。
+## 网格缩一半 = A* 节点 ×4，会直接冲击万敌压测；放大角色请用实体半径（footprint），不要动网格。
+const GRID := 32
+const TILE := GRID          # 旧名保留：现有代码全按「网格 = 图块」使用，语义一致
+## 美术图块默认尺寸；场景与图块集可以覆盖（16/24/48/64 都支持）
+const TILE_ART := 32
 const ACTOR1 := "res://assets/chars/Actor1.png"
 const MONSTER := "res://assets/chars/Monster.png"
 
 const TEX_FLOOR := "res://assets/tiles/Dungeon_Cave_TileA2.png"
 const TEX_WALL := "res://assets/tiles/Dungeon_TileA4.png"
+## 图块集里第 (col,row) 块的源矩形。换图块尺寸时不必再手写 Rect2，按尺寸算即可。
+static func src_rect(col: int, row: int, size: int = TILE_ART) -> Rect2:
+	return Rect2(col * size, row * size, size, size)
+
+
 const SRC_FLOOR := Rect2(32, 32, 32, 32)    # 洞穴泥地内部块
 const SRC_WALL := Rect2(480, 32, 32, 32)    # 洞穴岩壁内部块
 

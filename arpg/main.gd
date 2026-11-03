@@ -387,7 +387,9 @@ func build_floor() -> void:
 	if _stress_n > 0:
 		dungeon.generate_arena()
 	else:
-		dungeon.generate(floor_no, dungeon_seed + floor_no * 7919 if dungeon_seed != 0 else -1)
+		# 走廊宽度下限 = 全场最大实体占几格（大角色进得去，不靠玩家撞墙才发现）
+		dungeon.generate(floor_no, dungeon_seed + floor_no * 7919 if dungeon_seed != 0 else -1,
+			maxi(2, ArpgBalance.max_footprint()))
 
 	world = ArpgWorld.new()
 	_slot("世界").add_child(world)

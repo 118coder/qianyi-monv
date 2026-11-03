@@ -11,7 +11,11 @@ extends RefCounted
 const EMPTY := -1
 
 var scene_name := "新场景"
+## 美术图块尺寸：图块集的切分单元，画布上一格 = 一个图块
 var tile_size := 32
+## 逻辑网格：游戏侧寻路/碰撞的单元。图块可以比它大或小，两者互不约束。
+## 默认与 tile_size 相同（1 图块 = 1 格），这是最直观的用法。
+var grid_size := 32
 var cols := 40
 var rows := 24
 var tileset_path := ""
@@ -136,6 +140,7 @@ func to_dict() -> Dictionary:
 		"version": 1,
 		"name": scene_name,
 		"tile_size": tile_size,
+		"grid_size": grid_size,
 		"width": cols,
 		"height": rows,
 		"tileset": tileset_path,
@@ -149,6 +154,7 @@ static func from_dict(d: Dictionary) -> RefCounted:
 	var s = (load("res://creator/core/tile_scene.gd") as GDScript).new()
 	s.scene_name = str(d.get("name", "未命名"))
 	s.tile_size = int(d.get("tile_size", 32))
+	s.grid_size = int(d.get("grid_size", s.tile_size))
 	s.cols = int(d.get("width", 40))
 	s.rows = int(d.get("height", 24))
 	s.tileset_path = str(d.get("tileset", ""))

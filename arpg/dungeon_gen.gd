@@ -39,6 +39,9 @@ var rooms := []           # [Rect2i]（按距起点距离升序：0 = 出发房�
 var room_kind := []       # 与 rooms 对齐：RoomKind
 var start_cell := Vector2i.ZERO
 var stair_cell := Vector2i(-1, -1)     # 楼梯格（最远房间中心）；Boss 层为 -1
+## 走廊宽度（格）。默认 2 —— 单人 32px 走廊太窄，8 人小队跟随时会堵门。
+## 出现大体积实体时由 main 传 maxi(2, 最大 footprint)，保证生成出来的走廊进得去。
+var corridor_w := 2
 var boss_floor := false
 var rng := RandomNumberGenerator.new()
 
@@ -49,7 +52,8 @@ var _loot_cursor := 0
 
 # ———————— 入口 ————————
 
-func generate(floor: int, seed_val: int = -1) -> void:
+func generate(floor: int, seed_val: int = -1, corridor: int = 2) -> void:
+	corridor_w = clampi(corridor, 2, 4)
 	if seed_val >= 0:
 		rng.seed = seed_val
 	else:
@@ -477,8 +481,8 @@ func _add_room(r: Rect2i, kind: int = RoomKind.NORMAL) -> void:
 func _carve(c: Vector2i) -> void:
 	if c.x < 0 or c.y < 0 or c.x >= w or c.y >= h or grid[c.x][c.y] == FLOOR:
 		return
-	for dx in 2:
-		for dy in 2:
+	for dx in corridor_w:
+		for dy in corridor_w:
 			var cc := c + Vector2i(dx, dy)
 			if cc.x > 0 and cc.y > 0 and cc.x < w - 1 and cc.y < h - 1:
 				grid[cc.x][cc.y] = FLOOR

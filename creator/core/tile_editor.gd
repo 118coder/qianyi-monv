@@ -19,11 +19,14 @@ const TILES_DIR := "res://assets/tiles"
 const SCENE_DIR := "res://data/scenes"
 const SCENE_FILE := "res://data/scenes/scene001.json"
 const UNDO_MAX := 40
+## 支持的图块尺寸。尺寸只影响渲染与切分，与逻辑网格解耦（见 docs/网格与图块方案.md）
+const TILE_SIZES := [16, 24, 32, 48, 64]
 
 var scene = null
 var _canvas = null
 var _palette = null
 var _tileset_opt: OptionButton
+var _tile_size_opt: OptionButton
 var _layer_list: VBoxContainer
 var _size_w: SpinBox
 var _size_h: SpinBox
@@ -66,6 +69,20 @@ func _build_ui() -> void:
 			_load_tileset(str(_tilesets[i]))
 	)
 	left.add_child(_tileset_opt)
+
+	var szh := HBoxContainer.new()
+	szh.add_theme_constant_override("separation", 6)
+	left.add_child(szh)
+	UI.label(szh, "图块", 12, UI.DIM)
+	_tile_size_opt = OptionButton.new()
+	_tile_size_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for s in TILE_SIZES:
+		_tile_size_opt.add_item("%d px" % s)
+	_tile_size_opt.item_selected.connect(func(i):
+		_set_tile_size(int(TILE_SIZES[i]))
+	)
+	szh.add_child(_tile_size_opt)
+
 	var imp := UI.hbox(left, 6)
 	UI.button(imp, "导入 PNG", _import_tileset, 96)
 	UI.button(imp, "刷新", func():
@@ -203,15 +220,76 @@ func _load_tileset(path: String) -> void:
 		return
 	_cur_tileset = path
 	scene.tileset_path = path
-	scene.tileset_cols = maxi(1, img.get_width() / scene.tile_size)
-	scene.tileset_rows = maxi(1, img.get_height() / scene.tile_size)
-	_palette.set_tileset(_tex(path), scene.tile_size, scene.tileset_cols, scene.tileset_rows)
-	_canvas.tex = _tex(path)
-	_canvas.queue_redraw()
+	# 换图块集时按图片尺寸重新推荐一次：768×576 会推荐 48，512×384 推荐 32
+	var guess := guess_tile_size(img.get_width(), img.get_height())
+	if guess != scene.tile_size:
+		scene.tile_size = guess
+		scene.grid_size = guess
+	_sync_size_opt()
+	_rechop()
 	for i in _tilesets.size():
 		if str(_tilesets[i]) == path:
 			_tileset_opt.select(i)
-	_set_status("%s：%d × %d 格图块" % [path.get_file(), scene.tileset_cols, scene.tileset_rows], 1)
+
+
+## 按当前 tile_size 重新切分图块集，并让调色板/画布/视图跟上
+func _rechop() -> void:
+	var img: Image = _img(_cur_tileset) if _cur_tileset != "" else null
+	if img == null:
+		return
+	scene.tileset_cols = maxi(1, img.get_width() / scene.tile_size)
+	scene.tileset_rows = maxi(1, img.get_height() / scene.tile_size)
+	_palette.set_tileset(_tex(_cur_tileset), scene.tile_size, scene.tileset_cols, scene.tileset_rows)
+	_canvas.tex = _tex(_cur_tileset)
+	_canvas.fit_view()
+	_canvas.queue_redraw()
+	_set_status("%s　图块 %dpx　%d × %d 格　（网格 %dpx）" % [
+		_cur_tileset.get_file(), scene.tile_size,
+		scene.tileset_cols, scene.tileset_rows, scene.grid_size], 1)
+
+
+func _set_tile_size(sz: int) -> void:
+	if sz == scene.tile_size:
+		return
+	_push_undo()
+	scene.tile_size = sz
+	# 1 图块 = 1 格是最直观的默认；图块比网格大/小的场景后续再单独暴露网格设置
+	scene.grid_size = sz
+	_sync_size_opt()
+	_rechop()
+
+
+func _sync_size_opt() -> void:
+	if _tile_size_opt == null:
+		return
+	var i := TILE_SIZES.find(scene.tile_size)
+	if i >= 0:
+		_tile_size_opt.select(i)
+
+
+## 按图片尺寸推荐图块尺寸：能整除 + 列数落在合理区间，平手时偏向 32
+static func guess_tile_size(w: int, h: int) -> int:
+	var best := 32
+	var best_score := -1
+	for sz in TILE_SIZES:
+		var s0: int = int(sz)
+		if w % s0 != 0 or h % s0 != 0:
+			continue
+		var cols := w / s0
+		var rows := h / s0
+		if cols < 4 or rows < 4 or cols > 64 or rows > 64:
+			continue
+		var score := 100
+		if cols >= 8 and cols <= 32:
+			score += 20
+		if rows >= 8 and rows <= 32:
+			score += 20
+		if s0 == 32:
+			score += 5
+		if score > best_score:
+			best_score = score
+			best = s0
+	return best
 
 
 ## 用 Image 直接解码，绕开 Godot 的导入流程 —— 用户丢进来的新 PNG 立刻能用

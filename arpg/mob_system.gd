@@ -262,6 +262,23 @@ func nearest(from: Vector2, max_d: float = 1e12) -> int:
 	return best
 
 
+## 占几格：由碰撞直径向上取整。不是手填属性，是派生量 ——
+## 用于寻路时膨胀障碍，以及生成器校验走廊宽度（见 docs/网格与图块方案.md）。
+func footprint_of(i: int) -> int:
+	if i < 0 or i >= count:
+		return 1
+	return maxi(1, int(ceil(radius[i] * 2.0 / float(ArpgData.GRID))))
+
+
+## 本帧所有存活实体里的最大 footprint（生成器/调试面板用）
+func max_footprint() -> int:
+	var m := 1
+	for i in count:
+		if hp[i] > 0:
+			m = maxi(m, footprint_of(i))
+	return m
+
+
 func in_radius(from: Vector2, r: float) -> PackedInt32Array:
 	var out := PackedInt32Array()
 	for c in _query_cells(from, r):
