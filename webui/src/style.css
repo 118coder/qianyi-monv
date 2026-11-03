@@ -1,0 +1,145 @@
+/* style.css — UI 皮肤。改这里不需要重编 C++/C#，这是选 WebView2 做 UI 的主要理由之一。 */
+:root {
+  --bg: rgba(14, 16, 20, 0.92);
+  --panel: rgba(24, 27, 33, 0.94);
+  --line: rgba(255, 255, 255, 0.10);
+  --text: #e9edf3;
+  --dim: #9aa4b2;
+  --accent: #ffce5c;
+  --hp: #63d471;
+  --sp: #5b8dfa;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent; /* 关键：让 Godot 画面透出来（宿主只开 UI 区域） */
+  color: var(--text);
+  font: 14px/1.5 "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  user-select: none;
+  overflow: hidden;
+}
+
+.layout {
+  position: fixed;
+  inset: 0;
+  padding: 12px;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 10px;
+  pointer-events: none; /* 空白处不吃鼠标事件，交给 Godot */
+}
+
+.layout > * { pointer-events: auto; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+}
+
+.floor { font-weight: 600; letter-spacing: .5px; }
+.gold { color: var(--accent); font-variant-numeric: tabular-nums; }
+.mode { margin-left: auto; color: var(--dim); font-size: 12px; }
+
+.vitals { display: grid; gap: 6px; }
+
+.bar {
+  position: relative;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transition: width .18s ease-out;
+}
+
+.bar.hp span { background: linear-gradient(90deg, #3aa655, var(--hp)); }
+.bar.sp span { background: linear-gradient(90deg, #3358c4, var(--sp)); height: 60%; }
+
+.bar em {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  font-size: 11px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .7);
+}
+
+.panel {
+  align-self: start;
+  width: 240px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.panel h2 { margin: 0 0 6px; font-size: 12px; color: var(--dim); font-weight: 500; }
+.panel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.panel li { display: flex; justify-content: space-between; font-size: 12px; }
+.panel li b { color: var(--dim); font-weight: 500; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 8, 11, .62);
+}
+
+.modal-body {
+  width: 360px;
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .5);
+}
+
+.modal-body h2 { margin: 0 0 4px; font-size: 18px; }
+.hint { margin: 0 0 12px; color: var(--dim); font-size: 12px; }
+.rows { display: grid; gap: 8px; }
+
+button {
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .08);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+button:hover { background: rgba(255, 255, 255, .14); }
+button.ghost { background: transparent; color: var(--dim); }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(20, 23, 28, .94);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.hidden { display: none; }

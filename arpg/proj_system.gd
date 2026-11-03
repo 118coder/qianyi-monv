@@ -71,29 +71,33 @@ func _physics_process(delta: float) -> void:
 	for i in count:
 		if alive[i] == 0:
 			continue
-		pos[i] += dir[i] * spd[i] * delta
+		# —— 扫掠步进：弹丸这一帧走的是「线段 p0→p1」，命中/撞墙都按线段判定 ——
+		# 旧实现只判 p1 这一个点：高速弹（430px/s ≈ 7px/帧，掉帧时 14px+）会整帧
+		# 跨过目标（目标圆直径 ~20px）而不触发命中，表现为"从怪身上穿过去没伤害"。
+		var p0: Vector2 = pos[i]
+		var p1: Vector2 = p0 + dir[i] * spd[i] * delta
+		pos[i] = p1
 		life[i] -= delta
 		if life[i] <= 0.0:
 			alive[i] = 0
 			continue
-		if not world.dungeon.is_floor(Vector2i((pos[i] / float(TILE)).floor())):
-			world.burst(pos[i], ArpgTex.tex(ArpgWorld.FX_PARTICLE_PATH), tint[i], 4, 120.0, 0.22, 0.07)
+		if not _seg_open(p0, p1):
+			world.burst(p1, ArpgTex.tex(ArpgWorld.FX_PARTICLE_PATH), tint[i], 4, 120.0, 0.22, 0.07)
 			alive[i] = 0
 			continue
 		if faction[i] == 0:
-			# 空间哈希邻域查询命中（不再全表扫描）
-			for j in world.mobs.in_radius(pos[i], 9.0):
-				world.damage_mob(j, dmg[i], pos[i], 120.0)
+			var hit := _sweep_mob(p0, p1, 7.0)
+			if hit >= 0:
+				world.damage_mob(hit, dmg[i], pos[i], 120.0)
 				alive[i] = 0
-				break
-		elif pl != null and not pl.dead and (pl.position - pos[i]).length() < 16.0:
-			pl.take_damage(dmg[i], pos[i])
-			alive[i] = 0
 		else:
-			# 敌方弹也会打队友（AI 队友/APC 同样处于危险中）
-			if world.main.party != null:
+			if pl != null and not pl.dead and _seg_hits(p0, p1, pl.position, 15.0):
+				pl.take_damage(dmg[i], pos[i])
+				alive[i] = 0
+			elif world.main.party != null:
+				# 敌方弹也会打队友（AI 队友/APC 同样处于危险中）
 				for f in world.main.party.friends:
-					if is_instance_valid(f) and not f.dead and (f.position - pos[i]).length() < 15.0:
+					if is_instance_valid(f) and not f.dead and _seg_hits(p0, p1, f.position, 13.0):
 						f.take_damage(dmg[i], pos[i])
 						alive[i] = 0
 						break
@@ -106,6 +110,44 @@ func _physics_process(delta: float) -> void:
 			j2 += 1
 	count = j2
 	queue_redraw()
+
+
+## 线段是否全程在地板格上（12px 采样）：高速弹一帧能跨半格，只查端点会漏墙
+func _seg_open(a: Vector2, b: Vector2) -> bool:
+	var dv := b - a
+	var steps := int(dv.length() / 12.0) + 1
+	var step := dv / float(steps)
+	var p := a
+	for s in steps:
+		p += step
+		if not world.dungeon.is_floor(Vector2i((p / float(TILE)).floor())):
+			return false
+	return true
+
+
+## 线段 → 敌人（取沿路径最先命中的那一只）；用空间哈希取候选，再对候选做圆-线段判定
+func _sweep_mob(a: Vector2, b: Vector2, r: float) -> int:
+	if world.mobs == null or world.mobs.count == 0:
+		return -1
+	var mid := (a + b) * 0.5
+	var reach := a.distance_to(b) * 0.5 + r + 26.0
+	var best := -1
+	var best_d := 1e18
+	for j in world.mobs.in_radius(mid, reach):
+		var c: Vector2 = world.mobs.pos[j]
+		var cp: Vector2 = Geometry2D.get_closest_point_to_segment(c, a, b)
+		if cp.distance_to(c) > r + world.mobs.radius[j]:
+			continue
+		var along := a.distance_squared_to(cp)
+		if along < best_d:
+			best_d = along
+			best = j
+	return best
+
+
+## 线段 → 圆形单位（玩家/队友）
+func _seg_hits(a: Vector2, b: Vector2, c: Vector2, r: float) -> bool:
+	return Geometry2D.get_closest_point_to_segment(c, a, b).distance_to(c) <= r
 
 
 func _copy(src: int, dst: int) -> void:

@@ -17,7 +17,9 @@ func setup(m: Node, initial: Node2D) -> void:
 
 
 func is_possessed(u) -> bool:
-	if current_unit == null:
+	# 主控单位可能是"已被释放的节点"（换层重建玩家/队友阵亡移出队伍）。
+	# 这时不能把它当成有效主控，否则所有单位都判定为"不是主控" → 输入全失效。
+	if current_unit == null or not is_instance_valid(current_unit):
 		return u == main.player
 	return u == current_unit
 

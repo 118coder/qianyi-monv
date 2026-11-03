@@ -6,3 +6,28 @@
 Godot_v*.exe
 Godot_v*_console.exe
 *.tmp
+
+# ── 多语言架构（C++/C#/WebView2）──
+native/build/
+native/bin/*.dll
+native/bin/*.so
+native/bin/*.dylib
+native/godot-cpp/
+native/qy_native.gdextension
+game_cs/.godot/
+game_cs/bin/
+game_cs/obj/
+webui/node_modules/
+webui/dist/
+
+# ── 本地工作记忆（不进仓库）──
+.workbuddy/
+
+# ── 第三方：pixelfx 只保留源码与渲染工具 ──
+# docs/ 是它自己的 12MB 图文文档，与本项目无关；records/ 是渲染产物，可随时重建
+vendor/pixelfx/docs/
+vendor/pixelfx/gallery/
+
+vendor/pixelfx/records/
+vendor/pixelfx/.claude-plugin/
+vendor/pixelfx/.github/

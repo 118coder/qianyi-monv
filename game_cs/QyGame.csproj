@@ -1,0 +1,21 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <!--
+    C# 逻辑层工程。
+
+    ⚠️ 版本必须对齐：Godot.NET.Sdk 的版本 = 你使用的 Godot **.NET 版**引擎版本
+       （当前仓库里的 Godot_v4.7.2-stable_win64.exe 是**标准版**，不含 C# 运行时，
+        要跑这套代码必须换 Godot_v4.7.2-stable_mono_win64）。
+
+    TargetFramework 同理：以 .NET 版引擎自带的为准（4.4~4.7 通常是 net8.0）。
+    本机只装了 SDK 7.0.401 / 10.0.303，缺 net8.0 targeting pack 时 dotnet build 会提示补装。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Qy</RootNamespace>
+    <AssemblyName>QyGame</AssemblyName>
+  </PropertyGroup>
+</Project>

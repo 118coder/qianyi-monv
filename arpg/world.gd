@@ -4,17 +4,15 @@ extends Node2D
 ## 敌群为数据实体（无节点）；命中反馈 = 火花 + 顿帧 + 震屏 + 震动 + 数字，分层分级。
 
 const TILE := ArpgData.TILE
+const DropSystem := preload("res://arpg/drop_system.gd")
 const TEX_FLOOR := preload("res://assets/tiles/Dungeon_Cave_TileA2.png")
 const TEX_WALL := preload("res://assets/tiles/Dungeon_TileA4.png")
 
 # 特效贴图（经 LRU 懒加载缓存，可承载上千张贴图）
-const FX_SLASH_PATH := "res://assets/fx/Slash1.png"
-const FX_SHOCKWAVE_RING_PATH := "res://assets/fx/ShockWaveRing1.png"
-const FX_SHOCKWAVE_PATH := "res://assets/fx/ShockWave1.png"
+## pixelfx 序列帧特效库（资源在 assets/fx/pxfx，由 tools/build_pixelfx_fx.py 生成）
+const Pxfx := preload("res://arpg/pxfx.gd")
+## 通用粒子贴图：pixelfx 全是序列帧，不提供"粒子喷溅"用的单张小图，爆点仍用这一张
 const FX_PARTICLE_PATH := "res://assets/fx/Particle100.png"
-const FX_RING_PATH := "res://assets/fx/Ring.png"
-const FX_LIGHT_RING_PATH := "res://assets/fx/LightRing.png"
-const FX_FOG_PATH := "res://assets/fx/Fog.png"
 
 const FX_CAP := 64          # 同时存活的贴图特效上限（超出释放最旧）
 const POPUP_CAP := 16       # 伤害数字上限
@@ -25,6 +23,7 @@ var player: ArpgPlayer
 var mobs: ArpgMobSystem
 var projs: ArpgProjSystem
 var pickups: ArpgPickupSystem
+var drops: DropSystem
 var actors_root: Node2D
 var fx_root: Node2D
 var chests := []
@@ -51,6 +50,9 @@ func build(d: ArpgDungeon, m: Node) -> void:
 	pickups = ArpgPickupSystem.new()
 	pickups.setup(self)
 	actors_root.add_child(pickups)
+	drops = DropSystem.new()
+	drops.setup(self)
+	actors_root.add_child(drops)
 
 	fx_root = Node2D.new()
 	fx_root.z_index = 40
@@ -109,11 +111,14 @@ func mob_count() -> int:
 
 
 ## 扇形范围查询（近战）：含敌人自身半径
+## ⚠️ 角度差必须绕回 (-π, π]：直接相减时，朝左/左上的挥砍与目标角度
+## 会一个在 +π 附近、一个在 -π 附近，差出 2π → 明明正对着也判定挥空。
 func mobs_in_arc(pos: Vector2, angle: float, reach: float, half_angle: float = 1.15) -> PackedInt32Array:
 	var out := PackedInt32Array()
 	for i in mobs.in_radius(pos, reach):
 		var v := mobs.pos[i] - pos
-		if v.length() <= reach + mobs.radius[i] and absf(angle - v.angle()) <= half_angle:
+		if v.length_squared() <= pow(reach + mobs.radius[i], 2.0) \
+				and absf(wrapf(v.angle() - angle, -PI, PI)) <= half_angle:
 			out.append(i)
 	return out
 
@@ -142,6 +147,12 @@ func spawn_projectile(p: Vector2, d: Vector2, speed: float, dmg: int, faction: S
 
 func spawn_pickup(p: Vector2, item_id: String) -> void:
 	pickups.spawn(p, item_id)
+
+
+## 击杀掉落爆量（金币/宝石）：数量、散开、吸附手感都在 balance.json 的 drops 段
+func spawn_drops(p: Vector2, total_gold: int, elite: bool = false, boss: bool = false) -> void:
+	if drops != null:
+		drops.spawn_burst(p, total_gold, elite, boss)
 
 
 func spawn_chest(cell: Vector2i) -> void:
@@ -257,31 +268,56 @@ func burst(pos: Vector2, tex: Texture2D, tint: Color, amount: int, spd: float, l
 	get_tree().create_timer(life + 0.3).timeout.connect(p.queue_free)
 
 
-## 近战剑气：Slash1 沿挥砍方向扫动
-func spawn_slash(pos: Vector2, angle: float, col: Color = Color(1, 1, 1, 0.95)) -> void:
-	var t := ArpgTex.tex(FX_SLASH_PATH)
-	fx_tex(pos, t, angle + PI / 2.0, 0.55, 0.95, 0.20, col, 0.9)
-	fx_tex(pos, t, angle + PI / 2.0 - 0.35, 0.35, 0.7, 0.16, Color(col.r, col.g, col.b, col.a * 0.6), 0.7)
-
-
-## 冲击环
-func spawn_nova(pos: Vector2, col: Color) -> void:
+## 播放一个 pixelfx 序列帧特效。
+## opts: scale 缩放 / rot 旋转 / tint 调制色 / speed 播放倍速 / flip 水平翻转 /
+##       additive 加法混合（默认开，光效更亮）/ z 层级
+## 返回播放器（一般不需要，保留给需要跟随目标的特效）。
+func spawn_pxfx(name: String, pos: Vector2, opts: Dictionary = {}) -> Sprite2D:
+	var p = Pxfx.make(name)
+	if p == null:
+		return null
 	_fx_guard()
-	fx_tex(pos, ArpgTex.tex(FX_SHOCKWAVE_RING_PATH), randf() * TAU, 0.25, 1.7, 0.32, col, 0.0, true)
-	fx_tex(pos, ArpgTex.tex(FX_RING_PATH), randf() * TAU, 0.2, 1.3, 0.28, Color(col.r, col.g, col.b, col.a * 0.7), 0.0, true)
+	p.position = pos
+	p.scale = Vector2.ONE * float(opts.get("scale", 1.0))
+	p.rotation = float(opts.get("rot", 0.0))
+	var tint = opts.get("tint", Color.WHITE)
+	if tint is Color:
+		p.modulate = tint
+	p.speed = float(opts.get("speed", 1.0))
+	if bool(opts.get("once", false)):
+		p.loop = false        # 循环特效也能当一次性播（例如传送门只开一下）
+	p.flip_h = bool(opts.get("flip", false))
+	p.z_index = int(opts.get("z", 0))
+	if bool(opts.get("additive", true)):
+		var mat := CanvasItemMaterial.new()
+		mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		p.material = mat
+	fx_root.add_child(p)
+	return p
+
+
+## 近战斩击：pixelfx 的挥砍序列帧 + 少量粒子收尾
+func spawn_slash(pos: Vector2, angle: float, col: Color = Color(1, 1, 1, 0.95)) -> void:
+	spawn_pxfx("slash", pos, {"rot": angle, "scale": 0.55, "tint": col})
+	burst(pos, ArpgTex.tex(FX_PARTICLE_PATH), col, 4, 170.0, 0.26, 0.08)
+
+
+## 冲击环（技能命中/范围爆发）
+func spawn_nova(pos: Vector2, col: Color) -> void:
+	spawn_pxfx("burst", pos, {"scale": 0.42, "tint": col, "z": -1})
 	burst(pos, ArpgTex.tex(FX_PARTICLE_PATH), col, 10, 180.0, 0.4, 0.10)
 
 
 ## 命中火花
 func spawn_hit_spark(pos: Vector2, col: Color) -> void:
-	fx_tex(pos, ArpgTex.tex(FX_SHOCKWAVE_PATH), randf() * TAU, 0.12, 0.4, 0.16, Color(col.r, col.g, col.b, 0.9), 0.0, true)
+	spawn_pxfx("hit", pos, {"scale": 0.34, "tint": col, "rot": randf() * TAU})
 	burst(pos, ArpgTex.tex(FX_PARTICLE_PATH), col, 7, 240.0, 0.3, 0.09)
 
 
-## 死亡烟尘
+## 死亡消散：燃尽序列帧加速播放（原序列 3.6 秒太长，压到 1.2 秒左右）
 func spawn_death_poof(pos: Vector2, col: Color) -> void:
-	fx_tex(pos, ArpgTex.tex(FX_FOG_PATH), randf() * TAU, 0.4, 1.15, 0.38, Color(col.r, col.g, col.b, 0.75))
-	burst(pos, ArpgTex.tex(FX_PARTICLE_PATH), Color(col.r, col.g, col.b, 0.9), 12, 150.0, 0.45, 0.11)
+	spawn_pxfx("dissolve", pos, {"scale": 0.62, "tint": col, "speed": 3.0})
+	burst(pos, ArpgTex.tex(FX_PARTICLE_PATH), Color(col.r, col.g, col.b, 0.85), 10, 150.0, 0.42, 0.10)
 
 
 ## 冲斩残影

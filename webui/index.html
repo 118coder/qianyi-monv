@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>千亿魔女 · UI</title>
+  <link rel="stylesheet" href="src/style.css" />
+</head>
+<body>
+  <div id="root" class="layout">
+    <!-- 顶部常驻条：数值都来自 host 快照 -->
+    <header class="topbar">
+      <div class="floor" id="floor">地下 1 层</div>
+      <div class="gold" id="gold">0 G</div>
+      <div class="mode" id="mode">连接中…</div>
+    </header>
+
+    <section class="vitals">
+      <div class="bar hp"><span id="hp-fill"></span><em id="hp-text">100 / 100</em></div>
+      <div class="bar sp"><span id="sp-fill"></span><em id="sp-text">50</em></div>
+    </section>
+
+    <section class="panel" id="party-panel">
+      <h2>队伍</h2>
+      <ul id="party"></ul>
+    </section>
+
+    <!-- 模态面板：WebView2 的典型用法（整块页面盖住游戏） -->
+    <section class="modal hidden" id="shop">
+      <div class="modal-body">
+        <h2>店铺</h2>
+        <p class="hint">这些按钮只发“意图”，状态权威在 host 侧。</p>
+        <div class="rows">
+          <button data-buy="potion">买 回复药水</button>
+          <button data-buy="herb">买 药草</button>
+          <button class="ghost" id="shop-close">关闭 (Esc)</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="toast hidden" id="toast"></div>
+  </div>
+
+  <!-- 顺序不能反：bridge 先定义全局，app 再消费 -->
+  <script src="src/bridge.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
