@@ -27,6 +27,24 @@ static var ELITE_CHANCE := 0.12
 static var DEATH_LOSS := 0.5
 
 
+## 全场最大实体占几格（含 Boss）。生成器拿它当走廊宽度下限，
+## 避免"生成了一个 Boss 挤不进去的走廊"这种只能靠玩家撞墙才发现的问题。
+static func max_footprint() -> int:
+	var m := 1
+	for k in ENEMIES:
+		if ENEMIES[k] is Dictionary:
+			m = maxi(m, _footprint_of_scale(float(ENEMIES[k].get("scale", 1.0))))
+	if BOSS is Dictionary and not BOSS.is_empty():
+		m = maxi(m, _footprint_of_scale(float(BOSS.get("scale", 1.0))))
+	return m
+
+
+## 与 ArpgMobSystem 同一口径：基础半径 9 × scale，直径 / 网格 向上取整
+static func _footprint_of_scale(scale: float) -> int:
+	var d := 9.0 * maxf(scale, 0.1) * 2.0
+	return maxi(1, int(ceil(d / float(ArpgData.GRID))))
+
+
 static func _static_init() -> void:
 	reload_data()
 
