@@ -101,6 +101,10 @@ const CMDS := {
 			{"k": "count", "t": "int", "zh": "数量", "def": 1},
 		],
 	},
+	"give_xp": {
+		"zh": "给经验", "col": Color(0.35, 0.5, 0.45),
+		"fields": [{"k": "amount", "t": "int", "zh": "数量", "def": 30}],
+	},
 	"heal_full": {"zh": "全队回满", "col": Color(0.3, 0.6, 0.4), "fields": []},
 	"win": {"zh": "★ 胜利", "col": Color(0.2, 0.55, 0.3), "fields": []},
 	"lose": {"zh": "★ 失败", "col": Color(0.6, 0.25, 0.2), "fields": []},
@@ -505,6 +509,8 @@ func _summary(c: Dictionary) -> String:
 			return "· %d G" % int(c.get("amount", 0))
 		"give_item":
 			return "· %s ×%d" % [str(c.get("tpl", "")), int(c.get("count", 1))]
+		"give_xp":
+			return "· %d XP" % int(c.get("amount", 0))
 	return ""
 
 
@@ -776,6 +782,8 @@ func _node_lines(c: Dictionary) -> Array:
 			out.append("给玩家金币 +%d" % int(c.get("amount", 0)))
 		"give_item":
 			out.append("给玩家 %s ×%d" % [c.get("tpl", "?"), c.get("count", 1)])
+		"give_xp":
+			out.append("给玩家经验 +%d" % int(c.get("amount", 0)))
 		"heal_full":
 			out.append("全员回满生命")
 		"win":

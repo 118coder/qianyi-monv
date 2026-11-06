@@ -1,0 +1,110 @@
+{
+  "name": "千渊地牢 · 主线剧情（ARPG 专用，楼层号 = 事件引擎回合数）",
+  "events": [
+    {
+      "name": "序章·债主通牒",
+      "once": true,
+      "condition": {},
+      "trigger": {"type": "turn_start", "turn": 1, "phase": "player"},
+      "commands": [
+        {"cmd": "music", "track": "dungeon"},
+        {"cmd": "dialogue", "speaker": "narrator", "lines": [
+          "潮湿的阶梯尽头，是传说中吞没千名打捞人的「千渊」。",
+          "债主的最后通牒还在耳边——十日之内，连本带利，三百枚金币。"
+        ]},
+        {"cmd": "dialogue", "speaker": "fencer", "lines": [
+          "三百枚……打完这一票，够还一半了。",
+          "走吧，别磨蹭。魔物身上可都是钱。"
+        ]},
+        {"cmd": "dialogue", "speaker": "witch", "lines": [
+          "哼，这种地牢对我来说就是自家后院。",
+          "小心点，剑士，别拖我后腿。"
+        ]}
+      ]
+    },
+    {
+      "name": "二层·深处低吼",
+      "once": true,
+      "condition": {},
+      "trigger": {"type": "turn_start", "turn": 2, "phase": "player"},
+      "commands": [
+        {"cmd": "fx", "kind": "shake", "at": "player"},
+        {"cmd": "dialogue", "speaker": "narrator", "lines": [
+          "头顶的岩层传来闷响——某种巨大的东西，在更深处低吼。"
+        ]},
+        {"cmd": "dialogue", "speaker": "witch", "lines": [
+          "听到了吗？这可不是一般魔物的动静。",
+          "……收好你的战利品。真正值钱的货，在下面。"
+        ]}
+      ]
+    },
+    {
+      "name": "三层·血腥味引来的围猎",
+      "once": true,
+      "condition": {},
+      "trigger": {"type": "turn_start", "turn": 3, "phase": "player"},
+      "commands": [
+        {"cmd": "dialogue", "speaker": "narrator", "lines": [
+          "骨爪擦过岩壁——被血腥味引来的魔物，围了上来！"
+        ]},
+        {"cmd": "spawn", "tpl": "orc", "cells": [[9, 2], [10, 2]]},
+        {"cmd": "spawn", "tpl": "wolf", "cells": [[9, 11]]}
+      ]
+    },
+    {
+      "name": "四层·前人的笔记",
+      "once": true,
+      "condition": {},
+      "trigger": {"type": "turn_start", "turn": 4, "phase": "player"},
+      "commands": [
+        {"cmd": "dialogue", "speaker": "narrator", "lines": [
+          "岩壁上钉着一具风干的尸体，怀里揣着半本笔记：",
+          "「守窟者巴洛尔，畏惧烈火。它睁眼时，别站在正面。」"
+        ]},
+        {"cmd": "dialogue", "speaker": "witch", "lines": [
+          "畏惧烈火吗……有意思。",
+          "把笔记收好，回去了说不定还值几个钱。"
+        ]},
+        {"cmd": "give_xp", "amount": 30}
+      ]
+    },
+    {
+      "name": "五层·守窟者睁眼",
+      "once": true,
+      "condition": {},
+      "trigger": {"type": "turn_start", "turn": 5, "phase": "player"},
+      "commands": [
+        {"cmd": "dialogue", "speaker": "narrator", "lines": [
+          "洞窟尽头的黑暗缓缓隆起——",
+          "「守窟者」巴洛尔，千渊最深处的主人，睁开了它的独眼。"
+        ]},
+        {"cmd": "dialogue", "speaker": "fencer", "lines": [
+          "……比想象中大得多。",
+          "喂，法师，你的「烈火」准备好了吗？"
+        ]},
+        {"cmd": "dialogue", "speaker": "witch", "lines": [
+          "随时可以。",
+          "全队听令——让它见识一下，什么叫千渊的客人！"
+        ]},
+        {"cmd": "heal_full"}
+      ]
+    },
+    {
+      "name": "终章·王座崩塌",
+      "once": true,
+      "condition": {},
+      "trigger": {"type": "unit_death", "unit": "boss"},
+      "commands": [
+        {"cmd": "fx", "kind": "shake", "at": "player"},
+        {"cmd": "dialogue", "speaker": "narrator", "lines": [
+          "巴洛尔的庞大身躯轰然倒塌，整座地牢都在震颤。",
+          "你们身后的岩壁裂开，露出通往地面的微光——传送门开了。"
+        ]},
+        {"cmd": "dialogue", "speaker": "fencer", "lines": [
+          "撤了。",
+          "带着能带走的全部，回去见债主。"
+        ]}
+      ]
+    }
+  ]
+}

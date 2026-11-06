@@ -214,13 +214,26 @@ func _run() -> void:
 	main.player.use_skill(0)
 	_check(main.player.skill_cd > 0.0, "技能进入冷却")
 	_check(main.player.sp < sp0, "技能消耗 SP")
-	# 任务：进度/完成/领奖
+	# 任务链：requires 前置 → 推进 → 完成 → 领奖（xp 走 gain_xp；升级扣减属正常，不比对裸 xp）
 	var gold0: int = main.rpg.gold
+	main.rpg.quests["q_intro"]["state"] = "active"   # 还原锁定态（楼层测试可能已把它打完）
+	main.rpg.quests["q_intro"]["progress"] = 0
+	_check(not main.rpg.quest_unlocked("q_hunt"), "前置未完成时 q_hunt 锁定")
+	var ph: int = int(main.rpg.quests["q_hunt"]["progress"])
+	main.rpg.quest_progress("kill", "any", 1)
+	_check(int(main.rpg.quests["q_hunt"]["progress"]) == ph, "锁定任务不推进进度")
+	main.rpg.quests["q_intro"]["state"] = "done"
+	_check(main.rpg.quest_unlocked("q_hunt"), "前置完成后 q_hunt 解锁")
 	for i in 8:
 		main.rpg.quest_progress("kill", "any", 1)
 	var claimed: String = main.quests.claim("q_hunt")
 	_check(claimed != "", "任务完成并领奖")
 	_check(main.rpg.gold > gold0, "任务奖励金币入账")
+	_check(claimed.contains("经验"), "任务 xp 奖励入账路径（领奖文本含经验）")
+	# 伤害管线 v2：combat 段热载 + 暴击路径不崩（popup/火花走特效池，headless 可跑）
+	_check(float(ArpgBalance.data.get("combat", {}).get("crit_mult", 0)) > 1.0, "combat 段已载入")
+	main.world.damage_mob(main.world.mobs.nearest(main.player.position), 9999, main.player.position, 150.0, true)
+	_check(true, "damage_mob 暴击/斩杀路径无崩溃")
 	# 商店：买入校验/卖出
 	main.rpg.inventory.remove("ore", 99)
 	main.rpg.gold = 500
@@ -294,7 +307,8 @@ func _run() -> void:
 
 	print("== 12. 事件引擎接线（main 侧触发链路） ==")
 	_check(main.events != null, "事件引擎已实例化")
-	_check(main.map_events.size() == 2, "地图 JSON 事件已载入（%d 条）" % main.map_events.size())
+	_check(main.map_events.size() == 6, "ARPG 剧情事件已载入（%d 条）" % main.map_events.size())
+	_check(main.quests != null and main.quests.rows().size() >= 1, "任务链 UI 行（仅已解锁）")
 	_check(main.over == false, "局未结束判定")
 	# 真实触发链路：on_phase_start → _fire → map_events 匹配 → 命令落点
 	main.map_events = [{"trigger": {"type": "turn_start", "phase": "player", "turn": 1},
@@ -313,6 +327,15 @@ func _run() -> void:
 	await main.events.on_unit_moved(main.player)
 	_check(main.world.mob_count() == mobs0 + 1, "zone 事件触发 → spawn 落点（+1 敌）")
 	paused = false
+	# give_xp 命令 + unit_death 触发器（Boss 死亡剧情链路）
+	var xp_a: int = main.player.xp
+	main.map_events = [{"trigger": {"type": "unit_death", "unit": "boss"},
+		"commands": [{"cmd": "give_xp", "amount": 30}]}]
+	main.events.fired.clear()
+	await main.events.on_unit_dead_tpl("boss", "barrog")
+	_check(main.player.xp == xp_a + 30, "unit_death 触发 → give_xp 落点（+%d）" % (main.player.xp - xp_a))
+	await main.events.on_unit_dead_tpl("imp", "imp")
+	_check(main.player.xp == xp_a + 30, "非 boss 死亡不误触")
 	main.map_events = []
 
 	print("== 13. AI 寻路 / 分离 / 索敌 ==")

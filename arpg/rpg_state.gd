@@ -60,11 +60,22 @@ func unequip(slot: String) -> bool:
 
 # ———————— 任务 ————————
 
+## 任务链：前置任务（requires）完成（done/claimed）才解锁；无前置恒解锁
+func quest_unlocked(qid: String) -> bool:
+	var req: String = str(ArpgBalance.data.get("quests", {}).get(qid, {}).get("requires", ""))
+	if req == "":
+		return true
+	var rq: Dictionary = quests.get(req, {})
+	return rq.get("state", "") in ["done", "claimed"]
+
+
 ## 事件推进：etype = kill/collect/reach_floor，target = 模板id/物品id/"any"/"boss"
 func quest_progress(etype: String, target: String, amount: int = 1) -> void:
 	for qid in quests:
 		var q: Dictionary = quests[qid]
 		if q["state"] != "active":
+			continue
+		if not quest_unlocked(qid):
 			continue
 		var def: Dictionary = ArpgBalance.data.get("quests", {}).get(qid, {})
 		if def.get("type", "") != etype:

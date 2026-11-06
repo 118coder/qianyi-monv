@@ -709,10 +709,22 @@ func _build_play_hud() -> void:
 	play_hud.add_child(minimap)
 	minimap.bind_hud(self)
 
-	log_label = _label(13, Color(1, 1, 1, 0.85))
+	# 战斗日志底板：半透明黑衬底，日志不再直接压在地砖上（视觉走查反馈）
+	var log_bg := ColorRect.new()
+	log_bg.color = Color(0.03, 0.035, 0.05, 0.62)
+	log_bg.anchor_top = 1.0
+	log_bg.anchor_bottom = 1.0
+	log_bg.offset_left = 8
+	log_bg.offset_top = -146
+	log_bg.offset_right = 526
+	log_bg.offset_bottom = -42
+	log_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	play_hud.add_child(log_bg)
+	play_hud.move_child(log_bg, 0)
+	log_label = _label(13, Color(1, 1, 1, 0.92))
 	log_label.anchor_top = 1.0
 	log_label.anchor_bottom = 1.0
-	log_label.offset_left = 14
+	log_label.offset_left = 16
 	log_label.offset_top = -140
 	log_label.offset_right = 520
 	log_label.offset_bottom = -46
@@ -875,7 +887,7 @@ func _build_dialogue() -> void:
 	dlg_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dlg_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(dlg_text)
-	v.add_child(_label(11, C_TEXT_DIM, "空格 / 点击 · 继续"))
+	v.add_child(_label(12, Color(0.88, 0.86, 0.72), "空格 / 点击 · 继续"))
 
 
 ## 事件对话框：逐行显示、等输入推进；期间暂停世界（退出时恢复原暂停态）
@@ -896,6 +908,9 @@ func show_dialogue(speaker_id: String, lines: Array) -> void:
 		dlg_name.text = str(tpl["name"])
 	dlg_panel.visible = true
 	dlg_active = true
+	# 对话期间收起战斗日志：两者同占左下，层级冲突会截断日志文本（视觉走查反馈）
+	var log_was := log_label.visible
+	log_label.visible = false
 	var was_paused := get_tree().paused
 	get_tree().paused = true
 	for line in lines:
@@ -905,6 +920,7 @@ func show_dialogue(speaker_id: String, lines: Array) -> void:
 			await get_tree().process_frame
 	dlg_active = false
 	dlg_panel.visible = false
+	log_label.visible = log_was
 	get_tree().paused = was_paused
 
 
