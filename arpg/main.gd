@@ -1102,9 +1102,17 @@ func _settle(win: bool, title: String, flavor: String) -> void:
 		rpg.gold -= paid
 		rpg.debt_paid += paid
 		rpg.debt -= paid
+	# 还债结局反馈：清零时结算标题变金色（露塞提娅循环的正反馈时刻）
+	var title_col := Color(1, 0.95, 0.75) if win else Color(1, 0.55, 0.5)
+	if rpg.debt <= 0:
+		title = "债务清零！"
+		title_col = Color(1.0, 0.85, 0.25)
+		flavor = "%s\n三百枚金币，一枚不少。债主的脸色从未这么好看过。" % flavor
+	elif paid > 0:
+		flavor = "%s\n这一趟还了 %dG——离自由又近了一天。" % [flavor, paid]
 	var stats := "%s\n到达：地下 %d 层    击败：%d 只    等级：Lv %d" % [
 		flavor, floor_no, kills, player.level]
-	hud.show_settle(title, Color(1, 0.95, 0.75) if win else Color(1, 0.55, 0.5), stats, goods_text, total,
+	hud.show_settle(title, title_col, stats, goods_text, total,
 		combo_best, paid, rpg.debt)
 	hud.log("结算：偿还债务 %dG（剩余 %dG）" % [paid, rpg.debt])
 
@@ -1135,6 +1143,21 @@ func spawn_units(tpl_id: String, cells: Array) -> void:
 			cell = dungeon.random_cell_in(_near_room(anchor))
 		world.spawn_mob(tpl_id, cell, false, false)
 		world.spawn_nova(ArpgDungeon.cell_to_pos(cell), Color(0.65, 0.9, 1.0))
+
+
+## 事件命令 spawn_friend 的落点：剧情入队（新队友出现在主控身边，特效+播报）
+func spawn_friend_at(char_id: String) -> void:
+	if party == null or world == null or not ArpgBalance.CHARS.has(char_id):
+		return
+	var anchor := player.position if player != null else ArpgDungeon.cell_to_pos(dungeon.start_cell)
+	# 身边就近找可走格（先试脚下方，不行就随机房间）
+	var cell := Vector2i((anchor / float(ArpgData.TILE)).floor()) + Vector2i(0, 1)
+	if not dungeon.is_floor(cell):
+		cell = dungeon.random_cell_in(_near_room(anchor))
+	var u = party.recruit_char(char_id, cell)
+	if u != null:
+		world.spawn_nova(u.position, Color(0.55, 1.0, 0.75))
+		play_sfx("heal", -6.0)
 
 
 func _back_to_title() -> void:

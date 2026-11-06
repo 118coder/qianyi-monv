@@ -92,6 +92,11 @@ func _run_commands(cmds: Array) -> void:
 			"spawn":
 				main.spawn_units(str(c.get("tpl", "orc")), c.get("cells", []))
 				await main.get_tree().create_timer(0.35).timeout
+			"spawn_friend":
+				# 剧情入队（ARPG 专属）：把一个职业模板加进队伍；战棋侧无此方法则跳过
+				if main.has_method("spawn_friend_at"):
+					main.spawn_friend_at(str(c.get("tpl", "archer")))
+					await main.get_tree().create_timer(0.35).timeout
 			"set_flag":
 				main.flags[str(c.get("flag", ""))] = bool(c.get("value", true))
 			"if":
