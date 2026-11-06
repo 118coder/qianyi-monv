@@ -377,38 +377,32 @@
    "tier": 1
   }
  },
- "floor_enemy_count_base": 5,
- "floor_enemy_count_per": 2,
+ "floor_enemy_count_base": 8,
+ "floor_enemy_count_per": 3,
  "floor_pools": {
   "1": [
    [
     "imp",
-    5
+    6
    ],
    [
     "harpy",
-    3
-   ]
-  ],
-  "2": [
-   [
-    "imp",
-    3
-   ],
-   [
-    "harpy",
-    3
-   ],
-   [
-    "orc",
-    3
+    4
    ],
    [
     "wolf",
     2
    ]
   ],
-  "3": [
+  "2": [
+   [
+    "imp",
+    4
+   ],
+   [
+    "harpy",
+    4
+   ],
    [
     "orc",
     4
@@ -416,50 +410,60 @@
    [
     "wolf",
     3
+   ]
+  ],
+  "3": [
+   [
+    "orc",
+    6
+   ],
+   [
+    "wolf",
+    4
    ],
    [
     "fox",
-    2
+    4
    ],
    [
     "imp",
-    2
+    3
    ]
   ],
   "4": [
    [
     "orc",
-    3
+    5
    ],
    [
     "wolf",
-    3
+    4
    ],
    [
     "fox",
-    3
+    4
    ],
    [
     "knight",
-    2
+    4
    ]
   ],
   "5": [
    [
     "knight",
-    3
+    4
    ],
    [
     "fox",
-    3
+    4
    ],
    [
     "orc",
-    2
+    3
    ],
    [
     "wolf",
-    2
+    3
    ]
   ]
  },
