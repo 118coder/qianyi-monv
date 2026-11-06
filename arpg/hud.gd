@@ -65,6 +65,7 @@ var shop_root: Control
 var shop_gold: Label
 var shop_list: VBoxContainer
 var shop_tab := "buy"
+var shop_tab_nodes: Array = []   # 买入/卖出页签按钮（选中态高亮用）
 var shop_in_dungeon := false   # 地牢商人打开的商店：期间暂停世界，关闭恢复
 var toast_label: Label
 
@@ -196,14 +197,31 @@ func _build_toast() -> void:
 
 
 func set_quest_toast(text: String) -> void:
-	toast_label.text = "任务完成：%s" % text
-	toast_label.visible = true
-	var tw := create_tween()
-	tw.tween_interval(2.5)
-	tw.tween_property(toast_label, "modulate:a", 0.0, 0.4)
-	tw.tween_callback(func():
+	# 队列式 toast：连续完成+解锁两条同帧弹出时排队轮播，不再互相覆盖成一行
+	_toast_queue.append(text)
+	if _toast_playing:
+		return
+	_toast_playing = true
+	_play_next_toast()
+
+
+var _toast_queue: Array = []
+var _toast_playing := false
+
+
+func _play_next_toast() -> void:
+	if _toast_queue.is_empty():
+		_toast_playing = false
 		toast_label.visible = false
-		toast_label.modulate.a = 1.0)
+		return
+	toast_label.text = str(_toast_queue.pop_front())
+	toast_label.visible = true
+	toast_label.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(toast_label, "modulate:a", 1.0, 0.18)
+	tw.tween_interval(1.8)
+	tw.tween_property(toast_label, "modulate:a", 0.0, 0.35)
+	tw.tween_callback(_play_next_toast)
 
 
 func _build_menu_ui() -> void:
@@ -308,10 +326,12 @@ func refresh_shop() -> void:
 		for iid in game.shop.stock():
 			var price: int = game.shop.price_of(iid)
 			var can: bool = rpg.gold >= price
-			var row := _menu_row("%s —— %dG" % [game.shop.name_of(iid), price],
+			var row := _menu_row("%s —— %dG%s" % [game.shop.name_of(iid), price, "" if can else "（金币不足）"],
 				[["购买", func():
 					var err: String = game.shop.buy(iid)
-					refresh_shop()]], C_TEXT if can else C_TEXT_DIM)
+					if err != "":
+						game.hud.log(err)
+					refresh_shop()]], C_TEXT if can else C_TEXT_DIM, not can)
 			shop_list.add_child(row)
 	else:
 		var rows: Array = rpg.inventory.rows()
@@ -324,16 +344,28 @@ func refresh_shop() -> void:
 				[["卖出", func():
 					game.shop.sell_slot(i)
 					refresh_shop()]]))
+	shop_list.add_child(_label(11, C_TEXT_DIM, " "))
+	shop_list.add_child(_label(11, C_TEXT_DIM, "打捞提示：战利品在结算时自动折价还债，背包不留也行。"))
+	_refresh_shop_tabs()
 
 
-func _menu_row(text: String, btn_defs: Array = [], row_color: Color = Color.WHITE) -> Control:
+## 买入/卖出页签选中态：当前页高亮（视觉走查反馈：两页签看不出差别）
+func _refresh_shop_tabs() -> void:
+	for t in shop_tab_nodes:
+		var is_cur: bool = str(t.get_meta("tab", "")) == shop_tab
+		t.modulate = Color(1, 1, 1, 1.0) if is_cur else Color(1, 1, 1, 0.45)
+
+
+func _menu_row(text: String, btn_defs: Array = [], row_color: Color = Color.WHITE, btn_disabled: bool = false) -> Control:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 8)
 	var l := _label(14, row_color, text)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(l)
 	for bd in btn_defs:
-		h.add_child(_btn(str(bd[0]), bd[1]))
+		var b: Button = _btn(str(bd[0]), bd[1])
+		b.disabled = btn_disabled
+		h.add_child(b)
 	return h
 
 
@@ -545,12 +577,15 @@ func _build_shop_ui() -> void:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 6)
 	v.add_child(tabs)
+	shop_tab_nodes = []
 	for pair in [["买入", "buy"], ["卖出", "sell"]]:
 		var b := _tab_btn(pair[0], pair[1] == "buy")
+		b.set_meta("tab", pair[1])
 		b.pressed.connect(func():
 			shop_tab = pair[1]
 			refresh_shop())
 		tabs.add_child(b)
+		shop_tab_nodes.append(b)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_theme_stylebox_override("panel", _style_box(Color(0, 0, 0, 0.25), 8, true))
@@ -842,7 +877,21 @@ func update_bars(player: ArpgPlayer, bag_n: int, potion_n: int, floor_no: int, b
 	var sk: Dictionary = ArpgBalance.data.get("skills", {}).get(str(sks[0]) if sks.size() > 0 else "", {})
 	if sk.is_empty():
 		sk = player.tpl.get("skill", {})
-	skill_label.text = "技能 %s [K/L]  消耗SP%d  %s" % [sk.get("name", "?"), sk.get("sp", 0), ("冷却中" if player.skill_cd > 0.0 else "就绪")]
+	# 技能槽提示：列出已解锁槽位（K/L/U）；未满 3 槽时预告下一个解锁（成长钩子）
+	var slot_txt := ""
+	for si in sks.size():
+		var sd: Dictionary = ArpgBalance.data.get("skills", {}).get(str(sks[si]), {})
+		slot_txt += "%s[%s] " % [sd.get("name", "?"), ["K", "L", "U"][si] if si < 3 else "?"]
+	if sks.size() < 3:
+		var next_def: Dictionary = {}
+		for sid2 in ArpgBalance.data.get("char_skills", {}).get(player.char_id, []):
+			var dd: Dictionary = ArpgBalance.data.get("skills", {}).get(str(sid2), {})
+			if not dd.is_empty() and player.level < int(dd.get("unlock_level", 1)) \
+					and (next_def.is_empty() or int(dd.get("unlock_level", 1)) < int(next_def.get("unlock_level", 1))):
+				next_def = dd
+		if not next_def.is_empty():
+			slot_txt += "Lv%d解锁「%s」" % [int(next_def["unlock_level"]), next_def.get("name", "?")]
+	skill_label.text = slot_txt + ("  冷却中" if player.skill_cd > 0.0 else "  就绪")
 
 
 func set_perf(fps: int, mob_n: int, proj_n: int, sim_ms: float) -> void:
@@ -941,7 +990,9 @@ func _build_dialogue() -> void:
 	v.add_child(dlg_name)
 	dlg_text = _label(14, C_TEXT)
 	dlg_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dlg_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL   # 压满 VBox 宽度（走查：440px 就折行）
 	dlg_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	dlg_text.custom_minimum_size = Vector2(560, 0)
 	v.add_child(dlg_text)
 	v.add_child(_label(12, Color(0.88, 0.86, 0.72), "空格 / 点击 · 继续"))
 

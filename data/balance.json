@@ -70,15 +70,18 @@
  "char_skills": {
   "archer": [
    "arrow_volley",
-   "holy_light"
+   "holy_light",
+   "arrow_storm"
   ],
   "fencer": [
    "slash_dash",
-   "piercing_shot"
+   "piercing_shot",
+   "whirl_blade"
   ],
   "witch": [
    "flame_nova",
-   "meteor"
+   "meteor",
+   "judgment"
   ]
  },
  "chars": {
@@ -769,6 +772,35 @@
    "name": "冲斩",
    "sp": 18,
    "unlock_level": 1
+  },
+  "whirl_blade": {
+   "name": "无双乱舞",
+   "desc": "狂风般的突进斩，路径敌人受重创",
+   "kind": "dash",
+   "dmg_mult": 2.6,
+   "sp": 40,
+   "cd": 7.0,
+   "unlock_level": 7
+  },
+  "judgment": {
+   "name": "末日审判",
+   "desc": "天火焚地，环爆十二道烈焰",
+   "kind": "nova",
+   "dmg_mult": 2.6,
+   "sp": 45,
+   "cd": 8.0,
+   "unlock_level": 7
+  },
+  "arrow_storm": {
+   "name": "万箭穿心",
+   "desc": "扇形倾泻七支穿透重箭",
+   "kind": "volley",
+   "dmg_mult": 2.2,
+   "sp": 40,
+   "cd": 7.0,
+   "unlock_level": 7,
+   "count": 7,
+   "spread_deg": 32.0
   }
  },
  "trap_chance": 0.45,
@@ -818,5 +850,9 @@
    "稳住，别浪。"
   ]
  },
- "quote_chance": 0.15
+ "quote_chance": 0.15,
+ "milestone": {
+  "every": 25,
+  "gold": 40
+ }
 }

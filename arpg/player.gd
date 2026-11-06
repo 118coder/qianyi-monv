@@ -219,6 +219,8 @@ func _physics_process(delta: float) -> void:
 			use_skill(0)
 		if Input.is_action_just_pressed("skill2"):
 			use_skill(1)
+		if Input.is_action_just_pressed("skill3"):
+			use_skill(2)
 
 	if iframes > 0.0:
 		sprite.visible = int(iframes * 14.0) % 2 == 0
@@ -399,8 +401,10 @@ func use_skill(slot: int) -> void:
 		"volley":
 			lunge = -facing * 130.0
 			pop(0.9, 1.1)
-			for i in 5:
-				world.spawn_projectile(position + facing * 14.0, facing.rotated(deg_to_rad(-24.0 + i * 12.0)),
+			var n_arrows := int(def.get("count", 5))
+			var spread := float(def.get("spread_deg", 24.0))
+			for i in n_arrows:
+				world.spawn_projectile(position + facing * 14.0, facing.rotated(deg_to_rad(-spread + i * (2.0 * spread / float(n_arrows - 1 if n_arrows > 1 else 1)))),
 					float(tpl["proj_spd"]), int(eff_atk() * mult), "player", Color(0.62, 1.0, 0.8), "arrow")
 		"heal":
 			var heal := int(max_hp * float(def.get("heal", 0.3)))
