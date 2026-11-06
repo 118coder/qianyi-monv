@@ -163,7 +163,13 @@
    "weapon": "magic"
   }
  },
+ "combo": {
+  "window": 3.0
+ },
  "death_loss": 0.5,
+ "debt": {
+  "initial": 300
+ },
  "drop_base": [
   [
    "herb",
@@ -771,5 +777,24 @@
  "combat": {
   "crit_chance": 0.12,
   "crit_mult": 1.8
- }
+ },
+ "affixes": {
+  "swift": {
+   "name": "迅捷",
+   "spd_mult": 1.45
+  },
+  "tough": {
+   "name": "坚韧",
+   "hp_mult": 2.2
+  },
+  "vampiric": {
+   "name": "嗜血",
+   "lifesteal": 0.5
+  },
+  "burst": {
+   "name": "临终爆炸"
+  }
+ },
+ "affix_chance": 0.7,
+ "merchant_chance": 0.25
 }

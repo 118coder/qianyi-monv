@@ -172,6 +172,16 @@ func spawn_chest(cell: Vector2i) -> void:
 	chests.append(c)
 
 
+## 神秘商人晶体（复用 chest 交互链，E 键打开商店）
+func spawn_merchant(cell: Vector2i) -> void:
+	var c := ArpgChest.new()
+	c.merchant = true
+	c.setup(main, self)
+	c.position = ArpgDungeon.cell_to_pos(cell)
+	actors_root.add_child(c)
+	chests.append(c)
+
+
 # ———————— 楼梯 / 传送门 ————————
 
 func set_stairs(cell: Vector2i) -> void:

@@ -91,6 +91,9 @@ var char_id := "fencer"
 var floor_no := 1
 var bag := []            # item_id 列表（背包，上限 ArpgBalance.BAG_CAP）
 var kills := 0
+var combo_n := 0         # 当前连杀数（on_mob_dead 累计，窗口耗尽归零）
+var combo_t := 0.0       # 连杀窗口剩余秒数（balance.combo.window）
+var combo_best := 0      # 本局最高连杀（结算屏展示）
 var _interact_target := {}   # {kind: chest/stairs/portal, node/cell}
 var _full_warn_ms := 0
 var rng := RandomNumberGenerator.new()
@@ -331,6 +334,9 @@ func start_run(id: String) -> void:
 	char_id = id
 	floor_no = maxi(1, start_floor)      # 可视化配置：起始层（默认 1，等价于原行为）
 	kills = 0
+	combo_n = 0
+	combo_t = 0.0
+	combo_best = 0
 	rpg.setup()   # 刷新背包容量/任务表；金币与物品跨局保留（商店循环）
 	if not rpg.inventory.has("potion"):
 		rpg.inventory.add("potion", 3)
@@ -481,6 +487,9 @@ func build_floor() -> void:
 		# 宝箱 ×2：优先放叶节点房间（只连一条走廊的尽头），跑一趟有回报
 		for i in 2:
 			world.spawn_chest(dungeon.random_cell_in(dungeon.loot_room(rng)))
+		# 神秘商人晶体：普通层概率出现（紫色晶体 E 键进店——地牢里的补给惊喜点）
+		if rng.randf() < float(ArpgBalance.data.get("merchant_chance", 0.25)):
+			world.spawn_merchant(dungeon.random_cell_in(dungeon.loot_room(rng)))
 		# 楼梯放在生成器算好的最远房间（stair_cell），不再依赖 rooms 的下标含义
 		world.set_stairs(dungeon.stair_cell if dungeon.stair_cell.x >= 0 \
 			else dungeon._center(dungeon.rooms[dungeon.rooms.size() - 1]))
@@ -588,6 +597,12 @@ func _process(delta: float) -> void:
 	# 玩家战斗状态计时（队友 AI 参战判定用）
 	if player_combat_t > 0.0:
 		player_combat_t -= delta
+	# 连杀窗口衰减（只在 PLAY 时走：暂停/结算不吞连杀）
+	if combo_t > 0.0:
+		combo_t -= delta
+		if combo_t <= 0.0:
+			combo_t = 0.0
+			combo_n = 0
 
 	# 性能 HUD + 队伍面板（每 0.5s 刷新）
 	_perf_t -= delta
@@ -625,11 +640,9 @@ func _process(delta: float) -> void:
 		_do_interact()
 	_update_interact_prompt()
 	if player != null:
-		var potions := 0
-		for it in bag:
-			if it == "potion":
-				potions += 1
-		hud.update_bars(player, bag.size(), potions, floor_no, dungeon.boss_floor)
+		# 背包/药水一律读 rpg.inventory（main.bag 是遗留死数据，曾让顶栏永远显示 0 格）
+		var potions: int = rpg.inventory.count("potion")
+		hud.update_bars(player, rpg.inventory.used(), potions, floor_no, dungeon.boss_floor)
 
 	# 事件钩子：玩家跨格触发 zone 事件（引擎内有矩形/阵营过滤，重复调用安全）
 	if events != null and not events_silent and player != null \
@@ -658,7 +671,7 @@ func _update_interact_prompt() -> void:
 	for c in world.chests:
 		if is_instance_valid(c) and not c.opened and (c.position - cur.position).length() < 44.0:
 			_interact_target = {"kind": "chest", "node": c}
-			text = "E 开箱"
+			text = "E 神秘商店" if c.merchant else "E 开箱"
 			break
 	if stairs_dist() < 40.0:
 		_interact_target = {"kind": "stairs"}
@@ -681,7 +694,14 @@ func stairs_dist() -> float:
 func _do_interact() -> void:
 	match _interact_target.get("kind", ""):
 		"chest":
-			open_chest(_interact_target["node"])
+			var box: ArpgChest = _interact_target["node"]
+			if box.merchant:
+				# 神秘商人：不消耗晶体，打开地牢商店（期间暂停世界）
+				play_sfx("cursor")
+				hud.log("神秘商人：「打捞人，看看货吗？概不退换。」")
+				hud.show_shop(true)
+			else:
+				open_chest(box)
 		"stairs":
 			floor_no += 1
 			play_sfx("cursor")
@@ -893,6 +913,15 @@ func on_drop_collected(_kind: int, value: int) -> void:
 func on_mob_dead(i: int) -> void:
 	kills += 1
 	play_sfx("die")
+	# 连杀：窗口内继续击杀累计，到 3/5/8 播报（里程碑只在恰好达到时弹，避免每杀都刷屏）
+	combo_n += 1
+	combo_t = float(ArpgBalance.data.get("combo", {}).get("window", 3.0))
+	combo_best = maxi(combo_best, combo_n)
+	if combo_n == 3 or combo_n == 5 or combo_n == 8:
+		if player != null and is_instance_valid(player):
+			world.spawn_popup("%d 连杀！" % combo_n, player.position + Vector2(0, -46),
+				Color(1, 0.85, 0.3), 22)
+		play_sfx("heal", -6.0)
 	if player != null and is_instance_valid(player):
 		player.gain_xp(world.mobs.xp[i])
 	if party != null:
@@ -1027,9 +1056,17 @@ func _settle(win: bool, title: String, flavor: String) -> void:
 		total += n * int(itpl["value"])
 		lines.append("%s ×%d —— %d G" % [itpl["name"], n, n * int(itpl["value"])])
 	var goods_text := "\n".join(lines) if lines.size() > 0 else "（空手而归……）"
+	# 露塞提娅核心循环：结算时用现有金币尽力还债（先扣钱再展示，UI 读的是结算后的数）
+	var paid: int = mini(rpg.gold, rpg.debt)
+	if paid > 0:
+		rpg.gold -= paid
+		rpg.debt_paid += paid
+		rpg.debt -= paid
 	var stats := "%s\n到达：地下 %d 层    击败：%d 只    等级：Lv %d" % [
 		flavor, floor_no, kills, player.level]
-	hud.show_settle(title, Color(1, 0.95, 0.75) if win else Color(1, 0.55, 0.5), stats, goods_text, total)
+	hud.show_settle(title, Color(1, 0.95, 0.75) if win else Color(1, 0.55, 0.5), stats, goods_text, total,
+		combo_best, paid, rpg.debt)
+	hud.log("结算：偿还债务 %dG（剩余 %dG）" % [paid, rpg.debt])
 
 
 func on_player_dead() -> void:

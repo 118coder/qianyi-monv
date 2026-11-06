@@ -49,6 +49,9 @@ var radius := PackedFloat32Array()
 var atk_range := PackedFloat32Array()
 var tpl := PackedInt32Array()
 var elite := PackedByteArray()
+var affix := PackedByteArray()          # 0=无 1=迅捷 2=坚韧 3=嗜血 4=临终爆炸（精英专属词缀）
+var affix_seen := PackedByteArray()     # 遭遇播报去重（LOS 首次发现时弹词缀名）
+const AFFIX_IDS := {"swift": 1, "tough": 2, "vampiric": 3, "burst": 4}
 var boss := PackedByteArray()
 var aggro := PackedByteArray()
 var alive := PackedByteArray()
@@ -107,6 +110,7 @@ var _sheet: Texture2D
 const EV_BITE := 0
 const EV_SHOOT := 1
 const EV_SPECIAL := 2
+const EV_AFFIX := 3
 
 
 func setup(m: Node, w: Node, d: ArpgDungeon) -> void:
@@ -127,6 +131,8 @@ func setup(m: Node, w: Node, d: ArpgDungeon) -> void:
 	atk_range.resize(cap)
 	tpl.resize(cap)
 	elite.resize(cap)
+	affix.resize(cap)
+	affix_seen.resize(cap)
 	boss.resize(cap)
 	aggro.resize(cap)
 	alive.resize(cap)
@@ -191,7 +197,22 @@ func spawn(tpl_id: String, cell: Vector2i, elite_f: bool = false, boss_f: bool =
 	atk_range[i] = tpl_atk_range[ti]
 	tpl[i] = ti
 	elite[i] = 1 if elite_f else 0
+	affix[i] = 0
+	affix_seen[i] = 0
 	boss[i] = 1 if boss_f else 0
+	# 精英词缀（balance.affixes 数据驱动）：roll 命中后一次性把倍率算进面板，热路径零分支
+	if elite_f and not boss_f:
+		var aff_tbl: Dictionary = ArpgBalance.data.get("affixes", {})
+		if not aff_tbl.is_empty() and randf() < float(ArpgBalance.data.get("affix_chance", 0.7)):
+			var keys := aff_tbl.keys()
+			var akey: String = str(keys[randi() % keys.size()])
+			affix[i] = int(AFFIX_IDS.get(akey, 0))
+			var adef: Dictionary = aff_tbl[akey]
+			if float(adef.get("hp_mult", 1.0)) != 1.0:
+				max_hp[i] = int(max_hp[i] * float(adef["hp_mult"]))
+				hp[i] = max_hp[i]
+			if float(adef.get("spd_mult", 1.0)) != 1.0:
+				spd[i] *= float(adef["spd_mult"])
 	aggro[i] = 0
 	alive[i] = 1
 	state[i] = 0
@@ -213,6 +234,18 @@ func spawn(tpl_id: String, cell: Vector2i, elite_f: bool = false, boss_f: bool =
 
 func is_alive(i: int) -> bool:
 	return i >= 0 and i < count and alive[i] == 1 and hp[i] > 0
+
+
+## 词缀中文名（affixes 表 key 顺序约定见 AFFIX_IDS）；无词缀返回 ""
+func affix_name(i: int) -> String:
+	if i < 0 or i >= count or affix[i] == 0:
+		return ""
+	var want := int(affix[i])
+	for k in AFFIX_IDS:
+		if int(AFFIX_IDS[k]) == want:
+			var nm: String = str(ArpgBalance.data.get("affixes", {}).get(str(k), {}).get("name", str(k)))
+			return nm
+	return ""
 
 
 func damage(i: int, dmg: int, from: Vector2, knock_amt: float = 150.0) -> void:
@@ -596,6 +629,10 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 					_los_cache[los_key] = seen
 				if seen:
 					aggro[i] = 1
+					# 精英词缀遭遇播报：LOS 首次发现时头顶弹词缀名（去重）
+					if affix[i] != 0 and affix_seen[i] == 0:
+						affix_seen[i] = 1
+						ev.append([EV_AFFIX, i])
 				else:
 					_wander(i, d)
 					_try_move(i, d)
@@ -897,6 +934,10 @@ func _drain_events() -> void:
 							if f != null and not f.dead:
 								f.take_damage(atk[i], pos[i])
 						world.spawn_slash(pos[i] + to_t.normalized() * 14.0, to_t.angle(), Color(1, 0.45, 0.38))
+						# 嗜血词缀：命中按伤害比例回血（只吸真实命中的这一口）
+						if affix[i] == int(AFFIX_IDS.get("vampiric", 3)):
+							var ls: float = float(ArpgBalance.data.get("affixes", {}).get("vampiric", {}).get("lifesteal", 0.5))
+							hp[i] = mini(max_hp[i], hp[i] + int(atk[i] * ls))
 				EV_SHOOT:
 					var i2: int = e[1]
 					if not is_alive(i2):
@@ -915,12 +956,27 @@ func _drain_events() -> void:
 					world.spawn_nova(pos[i3], Color(1.0, 0.4, 0.2))
 					main.add_shake(0.28)
 					main.rumble(0.25, 0.5, 0.2)
+				EV_AFFIX:
+					var i4: int = e[1]
+					if not is_alive(i4):
+						break
+					var aname: String = affix_name(i4)
+					if aname != "":
+						world.spawn_popup("%s！" % aname, pos[i4] + Vector2(0, -30), Color(1.0, 0.55, 0.35), 19)
+						main.hud.log("%s的%s出现了！" % [aname, tpl_name[tpl[i4]]])
 
 
 func _handle_deaths() -> void:
 	for i in count:
 		if alive[i] == 1 and hp[i] <= 0:
 			alive[i] = 0
+			# 临终爆炸词缀：死后原地环射 6 弹 + 火环（逼玩家侧移收尾，别站桩捡尸）
+			if affix[i] == int(AFFIX_IDS.get("burst", 4)) and world != null:
+				for k in 6:
+					world.spawn_projectile(pos[i], Vector2.RIGHT.rotated(TAU * k / 6.0), 205.0,
+						maxi(1, atk[i] - 3), "enemy", Color(1.0, 0.55, 0.15), "bullet")
+				world.spawn_nova(pos[i], Color(1.0, 0.5, 0.15))
+				main.add_shake(0.22)
 			main.on_mob_dead(i)
 	# 紧凑化（swap 移除，保持数组稠密）
 	var j := 0
@@ -946,6 +1002,8 @@ func _copy_slot(src: int, dst: int) -> void:
 	atk_range[dst] = atk_range[src]
 	tpl[dst] = tpl[src]
 	elite[dst] = elite[src]
+	affix[dst] = affix[src]
+	affix_seen[dst] = affix_seen[src]
 	boss[dst] = boss[src]
 	aggro[dst] = aggro[src]
 	alive[dst] = 1

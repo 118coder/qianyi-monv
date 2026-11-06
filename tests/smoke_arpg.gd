@@ -207,7 +207,10 @@ func _run() -> void:
 	_check(main.player.eff_atk() == base_atk + 3, "攻击加成生效（+%d）" % (main.player.eff_atk() - base_atk))
 	main.rpg.unequip("weapon")
 	_check(main.player.eff_atk() == base_atk, "卸下回退")
-	# 技能 v2：解锁/冷却
+	# 技能 v2：解锁/冷却（先清掉压测层混战可能残留的冷却/眩晕/SP，保证断言确定性）
+	main.player.skill_cd = 0.0
+	main.player.stun = 0.0
+	main.player.sp = main.player.max_sp
 	var sks: Array = main.player.available_skills()
 	_check(sks.size() >= 1, "技能解锁查询（%d 个）" % sks.size())
 	var sp0: int = main.player.sp
@@ -230,10 +233,32 @@ func _run() -> void:
 	_check(claimed != "", "任务完成并领奖")
 	_check(main.rpg.gold > gold0, "任务奖励金币入账")
 	_check(claimed.contains("经验"), "任务 xp 奖励入账路径（领奖文本含经验）")
+	# 债务 / 连杀系统（露塞提娅核心循环 + 播报）
+	_check(main.rpg.debt == 300, "初始债务 300")
+	_check(float(ArpgBalance.data.get("combo", {}).get("window", 0)) > 0, "连杀窗口已载入")
 	# 伤害管线 v2：combat 段热载 + 暴击路径不崩（popup/火花走特效池，headless 可跑）
 	_check(float(ArpgBalance.data.get("combat", {}).get("crit_mult", 0)) > 1.0, "combat 段已载入")
 	main.world.damage_mob(main.world.mobs.nearest(main.player.position), 9999, main.player.position, 150.0, true)
 	_check(true, "damage_mob 暴击/斩杀路径无崩溃")
+	# 精英词缀：roll 落在合法域 / tough 倍率生效 / 临终爆炸死亡链路不崩
+	var mobs0_n: int = main.world.mob_count()
+	var ei: int = main.world.spawn_mob(ArpgBalance.ENEMIES.keys()[0], main.player.cell + Vector2i(2, 0), true)
+	_check(ei >= 0 and main.world.mobs.affix[ei] >= 0 and main.world.mobs.affix[ei] <= 4, "精英词缀 roll 合法域")
+	var aff_tbl: Dictionary = ArpgBalance.data.get("affixes", {})
+	_check(aff_tbl.size() == 4, "affixes 段 4 词缀已载入")
+	main.world.mobs.affix[ei] = int(ArpgMobSystem.AFFIX_IDS.get("burst", 4))   # 强制爆炸词缀验证死亡链路
+	main.world.mobs.damage(ei, 99999, main.player.position)
+	_check(true, "临终爆炸死亡链路无崩溃")
+	# 神秘商人：晶体生成 + 商店页往返（地牢模式暂停→关闭恢复）
+	var chests0: int = main.world.chests.size()
+	main.world.spawn_merchant(main.player.cell + Vector2i(-2, 0))
+	_check(main.world.chests.size() == chests0 + 1 and main.world.chests[-1].merchant, "神秘商人晶体生成")
+	var shop_was: bool = main.hud.shop_root.visible
+	main.hud.show_shop(true)
+	_check(main.hud.shop_root.visible and paused, "地牢商店打开且世界暂停")
+	main.hud.close_shop()
+	_check(not main.hud.shop_root.visible and not paused, "商店关闭且世界恢复")
+	main.hud.shop_root.visible = shop_was
 	# 商店：买入校验/卖出
 	main.rpg.inventory.remove("ore", 99)
 	main.rpg.gold = 500
