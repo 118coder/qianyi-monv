@@ -845,8 +845,38 @@ python tools/gh_pr.py status                                        # 查凭据�
 - ⚠️ 踩坑记录：任务链断言不能比对裸 `player.xp`（领奖 +20 后立即升级会扣 `xp_need`，净变化为负）；
   楼层测试会让 q_intro 开局即完成（reach_floor 1），链路断言要先手动还原锁定态。
 
-### 22.6 下一轮接续点
+### 22.6 伤害管线 v2：暴击 + 全怪伤害数字（同轮第二提交）
 
-1. **手动实机走查**：新档 → 序章对话 → 任务页只有 q_intro → 领奖解锁 q_hunt → 各层剧情文案观感 → Boss 死亡终章对话 → 传送门结算（本轮 headless 无法看对话 UI）。
-2. 数值校时：跑一遍手动流程估时长，调 `floor_enemy_count`/经验曲线对齐 55~70 分钟（蓝图 §5）。
-3. 战斗深化（暴击/受击反馈/伤害数字）是下一个 PR 的主题；经营主循环（天/租金）在 R2。
+- `world.damage_mob()`（玩家→怪的**唯一**伤害入口：近战/技能/冲刺/弹道全走这里）注入：
+  - **暴击**：`balance.json` 新 `combat` 段 `{crit_chance: 0.12, crit_mult: 1.8}`，热重载；
+  - **暴击读感三件套**：金色 26 号伤害数字（普通白色 15 号）+ 金色火花 + 加重顿帧/震屏/手柄震动，击退 ×1.35；
+  - **全怪受击伤害数字**：此前打怪只有火花没有数字（玩家受击反而有），现已补齐。
+- `spawn_popup()` 加 `size` 参数（默认 17，旧行为不变）。
+- smoke 断言：combat 段载入 + damage_mob 暴击/斩杀路径无崩溃。
+
+### 22.7 数值校时（对齐 55~70 分钟目标）
+
+- 实测口径：改动前每层仅 7~13 怪，autoplay 40s/层、真人估 3~5 分钟/层，全流程 20~30 分钟，**远不足一小时**。
+- 调整（`balance.json` 热重载）：`floor_enemy_count_base 5→8`、`per 2→3`（1 层 11 只 → 4 层 20 只），
+  `floor_pools` 全 5 层重排（1 层混入 wolf，3 层起 fox 主力，4 层 knight ×4 压轴）。
+- 等级节奏验算：怪 xp 62 只 ×均 8 + boss 90 + 任务 xp 120 + 事件 30 ≈ 736，xp 曲线累计到 Lv7 需 402 →
+  终章约 Lv7~8，witch 的 meteor（Lv6）在 Boss 战前解锁，节奏成立。
+- 金币口径：任务链 590G + 击杀掉落 ~250G + 宝箱 ≈ 900G，结算还债 600G 后仍有盈余（Demo 留悬念）。
+- autopilot 的 `retreat_at=100s` 撤退机制不受怪数影响（仍 PASS，结算数字变小）。
+
+### 22.8 ⚠️ 本轮 git 通道中断（提交在本地，未推远端）
+
+`git push` 到 github.com:443 持续连接失败（3 次退避重试均超时）。**全部改动已提交在本地分支
+`feat/demo-mainline-quest-events`（2 个提交）**，未建 PR。下一轮网络恢复后：
+
+```bash
+git push -u origin feat/demo-mainline-quest-events
+python tools/gh_pr.py pr --branch feat/demo-mainline-quest-events --title "feat(quest): 一小时Demo主线编排——任务链+剧情事件+暴击管线" --body "见 HANDOFF §22" --merge
+```
+
+### 22.9 下一轮接续点
+
+1. **推送上面那个本地分支并合并**（网络恢复后第一件事）。
+2. **手动实机走查**：新档 → 序章对话 → 任务页只有 q_intro → 领奖解锁 q_hunt → 各层剧情文案观感 → Boss 死亡终章对话 → 传送门结算（本轮 headless 无法看对话 UI）。
+3. 数值复测：跑一遍手动流程估时长（目标 55~70 分钟，怪量已加密，可能还需要微调 xp/血量）。
+4. 战斗深化剩余：受击方向性反馈、精英怪词缀；经营主循环（天/租金）在 R2。
