@@ -293,11 +293,15 @@ func _run() -> void:
 	_check(main.shop.sell_all_goods() >= 0, "一键卖出")
 	# 存档 v2 往返
 	var g_snap: int = main.rpg.gold
+	main.rpg.lifetime_kills = 77
+	main.rpg.best_floor = 4
 	_check(main.save_sys.save_game(), "存档 v2 写入")
 	main.rpg.gold = 1
+	main.rpg.lifetime_kills = 0
 	var err: String = main.save_sys.load_game()
 	_check(err == "", "读档无错误")
 	_check(main.rpg.gold == g_snap, "金币往返一致")
+	_check(main.rpg.lifetime_kills == 77 and main.rpg.best_floor == 4, "跨局成就统计随存档往返")
 
 	print("== 10. 基座（设置/音频/存档槽/校验/字符串） ==")
 	var mv: Variant = main.settings.get_value("master_vol")

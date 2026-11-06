@@ -11,6 +11,10 @@ var debt_paid := 0             # 累计已还债务
 var inventory := ArpgInventory.new()
 var equipped := {"weapon": "", "armor": "", "trinket": ""}
 var quests := {}               # qid -> {"state": "active/done/claimed", "progress": int}
+# 跨局成就统计（露塞提娅式经营积累感；结算时更新，随存档走）
+var lifetime_kills := 0        # 历史累计击杀
+var best_floor := 0            # 历史最深楼层
+var best_combo := 0            # 历史最高连杀
 
 
 func setup() -> void:
@@ -119,13 +123,17 @@ func quest_claim(qid: String) -> String:
 
 func to_dict() -> Dictionary:
 	return {"gold": gold, "debt": debt, "debt_paid": debt_paid, "inventory": inventory.to_dict(),
-		"equipped": equipped.duplicate(), "quests": quests.duplicate(true)}
+		"equipped": equipped.duplicate(), "quests": quests.duplicate(true),
+		"lifetime_kills": lifetime_kills, "best_floor": best_floor, "best_combo": best_combo}
 
 
 func from_dict(d: Dictionary) -> void:
 	gold = int(d.get("gold", 0))
 	debt = int(d.get("debt", 300))          # 旧档没有债务字段：按开局债务补齐
 	debt_paid = int(d.get("debt_paid", 0))
+	lifetime_kills = int(d.get("lifetime_kills", 0))
+	best_floor = int(d.get("best_floor", 0))
+	best_combo = int(d.get("best_combo", 0))
 	inventory.from_dict(d.get("inventory", {}))
 	var eq: Dictionary = d.get("equipped", {})
 	for slot in equipped:

@@ -1202,6 +1202,11 @@ func show_settle(title: String, title_col: Color, stats: String, goods: String, 
 	settle_total.text = "商品总价值：%d G" % total
 	if settle_combo != null:
 		settle_combo.text = "最高连杀 ×%d" % best_combo
+	# 跨局成就行：历史积累（露塞提娅式经营记分簿）
+	var life: ArpgRpgState = game.rpg if game != null and game.rpg != null else _menu_ctx.get("rpg", null)
+	if life != null:
+		settle_combo.text += "　·　历史：累计击杀 %d · 最深 %d 层 · 最高连杀 ×%d" % [
+			life.lifetime_kills, life.best_floor, life.best_combo]
 	if settle_debt != null:
 		if debt_left <= 0:
 			settle_debt.text = "债务清零！"

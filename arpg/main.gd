@@ -1112,6 +1112,10 @@ func _settle(win: bool, title: String, flavor: String) -> void:
 		rpg.gold -= paid
 		rpg.debt_paid += paid
 		rpg.debt -= paid
+	# 跨局成就统计（露塞提娅式积累：历史击杀/最深楼层/最高连杀，随存档走）
+	rpg.lifetime_kills += kills
+	rpg.best_floor = maxi(rpg.best_floor, floor_no)
+	rpg.best_combo = maxi(rpg.best_combo, combo_best)
 	# 还债结局反馈：清零时结算标题变金色（露塞提娅循环的正反馈时刻）
 	var title_col := Color(1, 0.95, 0.75) if win else Color(1, 0.55, 0.5)
 	if rpg.debt <= 0:
