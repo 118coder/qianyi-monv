@@ -520,7 +520,14 @@ func _intro() -> void:
 	await get_tree().create_timer(0.3).timeout
 	if state != State.PLAY:
 		return
-	await hud.show_banner("地下 %d 层" % floor_no, Color(0.16, 0.32, 0.65))
+	# 横幅带章节感：当前活跃任务名（任务链=章节推进的玩家侧感知）
+	var chapter := ""
+	for row in quests.rows():
+		if str(row.get("state", "")) == "active":
+			chapter = str(row.get("name", ""))
+			break
+	await hud.show_banner(("地下 %d 层 · %s" % [floor_no, chapter]) if chapter != "" else "地下 %d 层" % floor_no,
+		Color(0.16, 0.32, 0.65))
 	if events != null:
 		await events.on_phase_start("player", floor_no)
 
@@ -822,6 +829,8 @@ func _debug_rows() -> Array:
 			player.uid, player.uname, player.command, player.state, player.hp, player.max_hp])
 	if party != null:
 		for f in party.friends:
+			if not is_instance_valid(f):
+				continue   # 换层瞬间旧玩家节点已释放，调试行跳过（渲染走查发现的 Nil 访问）
 			out.append("[%s] %s %s cmd=%s state=%s HP=%d/%d tgt=%d" % [
 				"APC" if f.is_apc else "F", f.uid, f.unit_name, f.command, f.state,
 				f.hp, f.max_hp, f.ai_target])

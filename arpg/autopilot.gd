@@ -57,13 +57,15 @@ func _process(delta: float) -> void:
 	_status_t += THINK
 	if _status_t >= 5.0:
 		_status_t = 0.0
-		if main.state == 1 and is_instance_valid(main.player):
+		if main.state == 1 and is_instance_valid(main.player) \
+				and main.world != null and is_instance_valid(main.world):
 			var mi: int = main.world.mobs.nearest(main.player.position)
 			var dist_txt := "无" if mi < 0 else "%.1f" % main.player.position.distance_to(main.world.mobs.pos[mi])
 			print("[AUTOPLAY] t=%.0fs pos=(%.0f,%.0f) hp=%d/%d 最近敌人=%s 击杀=%d" % [
 				_elapsed, main.player.position.x, main.player.position.y,
 				main.player.hp, main.player.max_hp, dist_txt, main.kills])
-			if main.world != null and main.world.mobs != null:
+			if main.world != null and is_instance_valid(main.world) and main.world.mobs != null \
+					and is_instance_valid(main.world.mobs):
 				print("[AUTOPLAY] AI 卡住 %.0f%% · 堆叠 %.0f%% · 敌 %d · sim %.2fms" % [
 					main.world.mobs.stuck_ratio * 100.0, main.world.mobs.stack_ratio * 100.0,
 					main.world.mobs.count, main.world.mobs.sim_ms])

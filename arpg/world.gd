@@ -136,8 +136,9 @@ func damage_mob(i: int, base: int, from: Vector2, knock: float = 150.0, heavy: b
 	var dmg := maxi(1, roundi(base * randf_range(0.85, 1.15) * (float(combat.get("crit_mult", 1.8)) if is_crit else 1.0)))
 	var lethal := dmg >= mobs.hp[i]
 	# 暴击读感三件套：金色大号数字 + 金色火花 + 加重顿帧/震屏；普通命中白色小字
+	# （对比度：白字在浅色地砖上糊，靠 6px 描边拉出来——视觉走查反馈）
 	spawn_popup(str(dmg), mobs.pos[i] + Vector2(randf_range(-9.0, 9.0), -12.0),
-		Color(1.0, 0.84, 0.25) if is_crit else Color(0.98, 0.98, 0.95), 26 if is_crit else 15)
+		Color(1.0, 0.84, 0.25) if is_crit else Color(1.0, 1.0, 1.0), 26 if is_crit else 16)
 	spawn_hit_spark(mobs.pos[i] + (from - mobs.pos[i]).normalized() * -6.0,
 		Color(1.0, 0.8, 0.2) if is_crit else Color(1.0, 0.95, 0.75))
 	main.add_shake(0.2 if is_crit else (0.14 if not heavy else 0.22))
@@ -353,8 +354,8 @@ func spawn_popup(text: String, pos: Vector2, col: Color, size: int = 17) -> void
 	l.add_theme_font_override("font", ui_font)
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
-	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-	l.add_theme_constant_override("outline_size", 4)
+	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	l.add_theme_constant_override("outline_size", 6)
 	l.position = pos + Vector2(-14, -40)
 	l.z_index = 60
 	fx_root.add_child(l)
