@@ -238,6 +238,16 @@ func _draw() -> void:
 	if game.world != null:
 		_mark(d, game.world.stairs_cell, cell, ox, oy, false)
 		_mark(d, game.world.portal_cell, cell, ox, oy, true)
+		# 宝箱（金点）/ 神秘商人（紫点）：找路不再瞎逛（视觉走查后追加）
+		for c in game.world.chests:
+			if c == null or not is_instance_valid(c) or c.opened:
+				continue
+			var cc := Vector2i((c.position / float(ArpgData.TILE)).floor())
+			if not _is_seen(cc):
+				continue
+			var cp := Vector2(ox + (float(cc.x) + 0.5) * cell, oy + (float(cc.y) + 0.5) * cell)
+			draw_circle(cp, maxf(cell * 0.3, 1.5),
+				Color(0.78, 0.5, 1.0, 0.95) if c.merchant else Color(1.0, 0.85, 0.35, 0.95))
 
 	# 队友（只画已探索的）
 	if game.party != null:

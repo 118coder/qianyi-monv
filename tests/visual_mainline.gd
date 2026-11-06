@@ -33,6 +33,14 @@ func _run() -> void:
 		main.world.damage_mob(mi2, 77, main.player.position, 200.0, false)
 	for i in 4:
 		await process_frame
+	# 确定性台词帧：强制弹一句队友台词（不靠 15% 骰子）
+	if main.party != null and main.party.friends.size() > 0:
+		var sp = main.party.friends[0]
+		main.world.spawn_popup("痛快！", sp.position + Vector2(0, -40), Color(0.95, 0.97, 1.0, 0.95), 13)
+	# 血祭坛：强制生成 + 传送到旁拍外观（暗红石台 + 脉动红光）
+	main.world.spawn_altar(main.player.cell + Vector2i(3, 1))
+	for i in 20:
+		await process_frame
 	# 神秘商人晶体：传送到晶旁开商店拍几帧（紫色晶体 + 地牢商店页）
 	for c in main.world.chests:
 		if is_instance_valid(c) and c.merchant:
