@@ -864,19 +864,28 @@ python tools/gh_pr.py status                                        # 查凭据�
 - 金币口径：任务链 590G + 击杀掉落 ~250G + 宝箱 ≈ 900G，结算还债 600G 后仍有盈余（Demo 留悬念）。
 - autopilot 的 `retreat_at=100s` 撤退机制不受怪数影响（仍 PASS，结算数字变小）。
 
-### 22.8 ⚠️ 本轮 git 通道中断（提交在本地，未推远端）
+### 22.8 ✅ 视觉走查闭环（新工作法，本轮建立）
 
-`git push` 到 github.com:443 持续连接失败（3 次退避重试均超时）。**全部改动已提交在本地分支
-`feat/demo-mainline-quest-events`（2 个提交）**，未建 PR。下一轮网络恢复后：
+**movie 渲染 + 视觉子代理审图**（替代"必须人开窗口看"的部分场景）：
+- `tests/visual_mainline.gd`（新）：选人 → 序章对话（自动推进）→ 挂 autopilot 战斗 → 任务菜单；
+  配合 `--write-movie "<dir>/x.png" --fixed-fps 10 --quit-after 235 -s res://tests/visual_mainline.gd`
+  出 189 帧 PNG（输出到 `.shots/`，已 gitignore）。
+- 手动挂载 autopilot 必须 `ap.main = main`（CLI 模式由 main.gd 的 --autoplay 分支赋值，绕过即 Nil）。
+- 双轮审图修掉：战斗日志无底板压地砖、对话「继续」提示过暗、伤害数字糊在浅色地砖上（描边 4→6）、
+  对话框与日志层级冲突（对话期间收起日志）。
+- ** movie 模式 FPS 显示 9~11 是写盘 IO 假象（踩坑 #7），性能以 --bench 为准。
+- 审图遗留（实机确认）：HUD 左上血/蓝条层叠错位疑似、队友与怪同皮肤无血条区分（像素素材限制）。
 
-```bash
-git push -u origin feat/demo-mainline-quest-events
-python tools/gh_pr.py pr --branch feat/demo-mainline-quest-events --title "feat(quest): 一小时Demo主线编排——任务链+剧情事件+暴击管线" --body "见 HANDOFF §22" --merge
-```
+### 22.9 提交与合并（✅ 已完成）
 
-### 22.9 下一轮接续点
+- 网络中断期间 3 个提交安全保留在本地分支，恢复后 `git push` 直接成功；
+- **PR #6 已合并**（`1a32f00`），main 已同步。
+- ⚠️ 新踩坑：**代理环境下 python 的 SSL 证书链失败**（`CERTIFICATE_VERIFY_FAILED`）而 git 正常——
+  gh_pr.py 前加 `SSL_CERT_FILE="C:/Program Files/Git/mingw64/etc/ssl/certs/ca-bundle.crt"` 即可走通 API。
 
-1. **推送上面那个本地分支并合并**（网络恢复后第一件事）。
-2. **手动实机走查**：新档 → 序章对话 → 任务页只有 q_intro → 领奖解锁 q_hunt → 各层剧情文案观感 → Boss 死亡终章对话 → 传送门结算（本轮 headless 无法看对话 UI）。
-3. 数值复测：跑一遍手动流程估时长（目标 55~70 分钟，怪量已加密，可能还需要微调 xp/血量）。
-4. 战斗深化剩余：受击方向性反馈、精英怪词缀；经营主循环（天/租金）在 R2。
+### 22.10 下一轮接续点
+
+1. **手动实机走查**：新档 → 序章对话 → 任务页只有 q_intro → 领奖解锁 q_hunt → 各层剧情文案观感 → Boss 死亡终章对话 → 传送门结算（视觉走查覆盖不了的交互手感）。
+2. 数值复测：真人流程估时长（目标 55~70 分钟；怪量已加密到 11~20/层）。
+3. P1-1 手搭场景接入（蓝图推荐方案 C：独立试玩模式先行）。
+4. 战斗深化剩余：受击方向性反馈、精英怪词缀；**经营主循环（天/租金/还债）是 R2 主体**——Demo 结算屏已具备"还债节点"雏形。
