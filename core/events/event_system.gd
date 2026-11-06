@@ -28,6 +28,11 @@ func on_unit_dead(u) -> void:
 	await _fire("unit_death", {"uid": u.uid, "tpl": u.tpl_id})
 
 
+## 数据导向单位（ARPG 的 mob 是 SoA 数组槽位，没有 uid/tpl_id 属性）的死亡适配入口
+func on_unit_dead_tpl(uid: String, tpl: String) -> void:
+	await _fire("unit_death", {"uid": uid, "tpl": tpl})
+
+
 func on_unit_moved(u) -> void:
 	await _fire("zone", {"faction": u.faction, "cell": u.cell})
 
@@ -127,6 +132,11 @@ func _run_commands(cmds: Array) -> void:
 				if main.rpg.inventory.add(iid, n):
 					main.quests.on_pickup(iid)
 					main.hud.log("事件给予 %s ×%d" % [ArpgBalance.ITEMS.get(iid, {}).get("name", iid), n])
+			"give_xp":
+				var xp := int(c.get("amount", 10))
+				if main.player != null and is_instance_valid(main.player):
+					main.player.gain_xp(xp)
+				main.hud.log("获得 %d 经验（事件）" % xp)
 			"heal_full":
 				var u = main.possession.current_unit if main.possession.current_unit != null else main.player
 				u.heal_by(u.max_hp)

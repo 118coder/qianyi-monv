@@ -496,10 +496,20 @@ func build_floor() -> void:
 		_intro()
 
 
-## 地图 JSON 只取事件列表（重开一局 / F3 重载本层都会重新读取）
+## ARPG 剧情事件文件（与战棋 map001.json 解耦：两边触发语义不同——楼层号当回合数）
+const ARPG_EVENTS_PATH := "res://data/maps/arpg_events.json"
+
+## 只取事件列表（重开一局 / F3 重载本层都会重新读取）
 func _load_map_events() -> void:
-	var mdict: Dictionary = SrpgMapLoader.load_file(SrpgMapLoader.PATH)
-	map_events = mdict.get("events", [])
+	map_events = []
+	if not FileAccess.file_exists(ARPG_EVENTS_PATH):
+		return
+	var f := FileAccess.open(ARPG_EVENTS_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var d: Dictionary = JSON.parse_string(f.get_as_text())
+	if d is Dictionary:
+		map_events = d.get("events", [])
 
 
 ## 楼层开场：横幅后触发「回合开始」事件（楼层号 = 事件引擎的回合数：
@@ -878,6 +888,10 @@ func on_mob_dead(i: int) -> void:
 		player.gain_xp(world.mobs.xp[i])
 	if party != null:
 		party.gain_xp_all(world.mobs.xp[i])
+	# kill 类任务推进（q_hunt / q_boss；此前 on_kill 无人调用，任务永不完成）
+	# 注意 tpl_name 是模板表，实例索引要经 tpl[i] 二级寻址（PackedStringArray 越界就是直接用了 i）
+	if quests != null:
+		quests.on_kill(str(world.mobs.tpl_name[world.mobs.tpl[i]]), world.mobs.boss[i] == 1)
 	world.spawn_death_poof(world.mobs.pos[i], Color(0.9, 0.85, 0.8))
 	# 金币/宝石爆量：这只怪"值多少"仍由 gold_drop_min/max 决定（经济不变），
 	# 掉多少颗、怎么散、怎么吸由 drops 段配置
@@ -892,6 +906,10 @@ func on_mob_dead(i: int) -> void:
 		hud.log("魔王倒下了！传送门出现在它倒下的地方——")
 		audio.play_music("town")
 		world.set_portal(world.mobs.pos[i])
+		# 终章剧情：Boss 死亡触发结局对话（事件引擎 unit_death 触发器；mob 是 SoA 数据
+		# 层没有 uid/tpl_id 属性，走字符串适配入口）
+		if events != null and not events_silent:
+			await events.on_unit_dead_tpl("boss", str(world.mobs.tpl_name[i]))
 
 
 # ———————— 暂停 / 结算 ————————

@@ -791,3 +791,62 @@ python tools/gh_pr.py status                                        # 查凭据�
 - **网络抖动**：本轮 `api.github.com` 多次 502，脚本已自带「复用已有 PR」逻辑，退避重试即可，不会撞「PR 已存在」。
 - **`.gitignore` 要点**：`.workbuddy/`（本地记忆）、`native/build/`、`vendor/pixelfx/{docs,gallery,records}/`、
   `game_cs/{bin,obj}/`、`webui/node_modules/`。
+
+---
+
+## 22. 一小时 Demo 主线编排：任务链 + 剧情事件（2026-11-07）
+
+> 蓝图：`docs/一小时Demo蓝图.md`。目标是一条约 60 分钟的完整流程（章节推进/任务链/剧情节点/关卡编排），
+> 原则是**不加新大系统**，全部用事件引擎 + 任务管理器 + balance.json 编排。
+
+### 22.1 回归基线（本轮开场重跑，全部实机命令验证）
+
+| 测试 | 结果 |
+|---|---|
+| smoke_arpg | PASS（含本轮新增断言，见 22.4） |
+| smoke（战棋 29 项） | PASS |
+| smoke_creator（23 项） | PASS |
+| --autoplay | PASS |
+| --stress=10000 --bench=15 | 127 FPS（基线 ≥50，exit 0） |
+
+### 22.2 ✅ 修掉 autoplay 的 just_pressed 全链路失效（重要，影响所有模拟输入）
+
+- **现象**：机器人反复打印「重伤喝药」但 HP 一路掉到 2、药瓶数不减；interact/技能同样可疑。
+- **根因**：`autopilot._tap()` 用 `Input.action_press()`，本节点 `_process` 与 `main._process` 的执行顺序
+  导致 `is_action_just_pressed` 记录的帧号永远错开——**所有单帧类输入（药水/交互/技能）从未生效**。
+  持续按住类（移动/攻击，`is_action_pressed`）不受影响，所以机器人此前仍能勉强打通但战力残废。
+- **修法**：`_tap` 与其释放改走 `Input.parse_input_event(InputEventAction)`（真实输入管线，帧首分发）。
+- **修复后质变**：autoplay 从「42s 结算 · 击杀 6 · Lv1 卡 1 层」→「打穿到地下 4 层 · 击杀 27 · Lv5」。
+
+### 22.3 任务链（requires 前置解锁）
+
+- `rpg_state.gd`：新增 `quest_unlocked(qid)`（前置任务 state ∈ {done, claimed} 才解锁）；
+  `quest_progress()` 跳过未解锁任务（杀怪不会偷跑下游任务进度）。
+- `quest_manager.gd`：`rows()` 过滤未解锁（任务页只见当前章节）；`_check_done()` 加 `notified` 旗标
+  **修掉重复弹 toast 的预存 bug**（done 未领奖期间每次杀怪都重弹「任务完成」）+ 解锁下游任务时弹「新任务解锁」；
+  `claim()` 里 xp 奖励**真正入账**（`player.gain_xp`；此前只拼文本，`rpg_state.gd:92-93` 的 xp 从未生效）。
+- `main.on_mob_dead()` 补 `quests.on_kill(tpl_name[i], boss)`——**kill 类任务此前无人接线，永不完成**。
+- `balance.json.quests` 重构为 5 章任务链：`q_intro(reach 1) → q_hunt(kill 8) → q_ore(collect 5, 奖 sword_iron) → q_depth(reach 4) → q_boss(kill boss)`，总奖励 590G + 装备/药水。
+
+### 22.4 ARPG 剧情事件（与战棋地图 JSON 解耦）
+
+- **新文件 `data/maps/arpg_events.json`**：6 条事件，楼层号 = 事件引擎回合数（`_intro` 已有机制）。
+  T1 序章·债主通牒 / T2 深处低吼+震屏 / T3 增援（spawn 落点就近改刷）/ T4 前人笔记+give_xp / T5 Boss 战前对话+heal_full / **unit_death boss** 终章对话。
+- `main._load_map_events()` 改读 `ARPG_EVENTS_PATH`（不再共用战棋 `map001.json`——战棋的伊伊开场对话不会在 ARPG 念出来）。
+- `event_system.gd`：新增 `on_unit_dead_tpl(uid, tpl)`（mob 是 SoA 数据槽没有 uid/tpl_id 属性的适配入口）
+  和 `give_xp` 命令（match 分支）；Boss 死亡在 `on_mob_dead` 里触发终章事件（**不 win**，保留传送门结算流程）。
+- 编辑器同步：`editor/advanced_tabs.gd` 与 `creator/core/event_editor.gd` 的调色盘/默认参数/属性表单/节点摘要四处都加了 `give_xp`。
+- zone 触发器在随机地牢**不可靠**（rect 可能落墙里），Demo 剧情全用 turn_start + unit_death；zone 留给手搭场景（P1-1）。
+
+### 22.5 测试增量（smoke_arpg 新断言）
+
+- 第 9 节：任务链 6 断言（锁定不推进 / 前置完成解锁 / 领奖 / 金币 / xp 文本）。
+- 第 12 节：事件数 == 6；`unit_death → give_xp` 真实触发链路 + 非 boss 死亡不误触。
+- ⚠️ 踩坑记录：任务链断言不能比对裸 `player.xp`（领奖 +20 后立即升级会扣 `xp_need`，净变化为负）；
+  楼层测试会让 q_intro 开局即完成（reach_floor 1），链路断言要先手动还原锁定态。
+
+### 22.6 下一轮接续点
+
+1. **手动实机走查**：新档 → 序章对话 → 任务页只有 q_intro → 领奖解锁 q_hunt → 各层剧情文案观感 → Boss 死亡终章对话 → 传送门结算（本轮 headless 无法看对话 UI）。
+2. 数值校时：跑一遍手动流程估时长，调 `floor_enemy_count`/经验曲线对齐 55~70 分钟（蓝图 §5）。
+3. 战斗深化（暴击/受击反馈/伤害数字）是下一个 PR 的主题；经营主循环（天/租金）在 R2。

@@ -22,6 +22,7 @@ const NODE_TYPES := {
 	"music": ["切换音乐", Color(0.45, 0.3, 0.5), "＋音乐"],
 	"give_gold": ["给金币", Color(0.6, 0.55, 0.25), "＋金币"],
 	"give_item": ["给物品", Color(0.5, 0.5, 0.3), "＋物品"],
+	"give_xp": ["给经验", Color(0.35, 0.5, 0.45), "＋经验"],
 	"heal_full": ["全员回满", Color(0.3, 0.6, 0.4), "＋回满"],
 	"win": ["★胜利", Color(0.2, 0.55, 0.3), "＋胜利"],
 	"lose": ["★失败", Color(0.6, 0.25, 0.2), "＋失败"],
@@ -114,6 +115,8 @@ static func new_command(cmd: String) -> Dictionary:
 			return {"cmd": "give_gold", "amount": 50}
 		"give_item":
 			return {"cmd": "give_item", "tpl": "potion", "count": 1}
+		"give_xp":
+			return {"cmd": "give_xp", "amount": 30}
 		"heal_full":
 			return {"cmd": "heal_full"}
 		"win":
@@ -333,6 +336,8 @@ static func _build_command_fields(ed, ev: Dictionary, path: Array, node: Diction
 			ed.event_props.add_child(mo2)
 		"give_gold":
 			ed.event_props.add_child(_amount_spin(node, "amount", "金币数量", 50))
+		"give_xp":
+			ed.event_props.add_child(_amount_spin(node, "amount", "经验数量", 30))
 		"give_item":
 			ed.event_props.add_child(ed._lbl("物品"))
 			var io2 := OptionButton.new()
@@ -679,6 +684,8 @@ static func node_lines(c: Dictionary) -> Array:
 			out.append("给玩家金币 +%d" % int(c.get("amount", 0)))
 		"give_item":
 			out.append("给玩家 %s ×%d" % [c.get("tpl", "?"), c.get("count", 1)])
+		"give_xp":
+			out.append("给玩家经验 +%d" % int(c.get("amount", 0)))
 		"heal_full":
 			out.append("全员回满生命")
 		"win":

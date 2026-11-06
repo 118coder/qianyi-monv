@@ -48,7 +48,7 @@ func _process(delta: float) -> void:
 	_think = THINK
 	# 释放上一拍的按键
 	for a in _taps:
-		Input.action_release(a)
+		_inject(a, false)
 	_taps.clear()
 	for a in _pressed:
 		Input.action_release(a)
@@ -251,8 +251,18 @@ func _stop() -> void:
 
 
 func _tap(action: String) -> void:
-	Input.action_press(action)
+	# 用事件注入而非 Input.action_press：后者记录的帧号与本节点 _process 的执行顺序有关，
+	# main 下一帧查 is_action_just_pressed 时永远错过（实测药水/交互/技能全部失效）。
+	# parse_input_event 走真实输入管线，事件在帧首分发，just_pressed 必然可见。
+	_inject(action, true)
 	_taps.append(action)
+
+
+func _inject(action: String, pressed: bool) -> void:
+	var ev := InputEventAction.new()
+	ev.action = action
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
 
 
 # ———————— 查询 ————————

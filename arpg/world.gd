@@ -129,18 +129,24 @@ func mobs_in_radius(pos: Vector2, r: float) -> PackedInt32Array:
 	return mobs.in_radius(pos, r)
 
 
-## 伤害入口：浮动 + 火花 + 顿帧 + 震屏 + 震动；斩杀加重
+## 伤害入口：浮动 + 暴击 + 伤害数字 + 火花 + 顿帧 + 震屏 + 震动；斩杀/暴击加重
 func damage_mob(i: int, base: int, from: Vector2, knock: float = 150.0, heavy: bool = false) -> void:
-	var dmg := maxi(1, roundi(base * randf_range(0.85, 1.15)))
+	var combat: Dictionary = ArpgBalance.data.get("combat", {})
+	var is_crit: bool = randf() < float(combat.get("crit_chance", 0.12))
+	var dmg := maxi(1, roundi(base * randf_range(0.85, 1.15) * (float(combat.get("crit_mult", 1.8)) if is_crit else 1.0)))
 	var lethal := dmg >= mobs.hp[i]
-	spawn_hit_spark(mobs.pos[i] + (from - mobs.pos[i]).normalized() * -6.0, Color(1.0, 0.95, 0.75))
-	main.add_shake(0.14 if not heavy else 0.22)
-	main.hit_stop(0.09 if lethal else (0.055 if heavy else 0.035), 0.08 if lethal else 0.15)
+	# 暴击读感三件套：金色大号数字 + 金色火花 + 加重顿帧/震屏；普通命中白色小字
+	spawn_popup(str(dmg), mobs.pos[i] + Vector2(randf_range(-9.0, 9.0), -12.0),
+		Color(1.0, 0.84, 0.25) if is_crit else Color(0.98, 0.98, 0.95), 26 if is_crit else 15)
+	spawn_hit_spark(mobs.pos[i] + (from - mobs.pos[i]).normalized() * -6.0,
+		Color(1.0, 0.8, 0.2) if is_crit else Color(1.0, 0.95, 0.75))
+	main.add_shake(0.2 if is_crit else (0.14 if not heavy else 0.22))
+	main.hit_stop(0.1 if (lethal or is_crit) else (0.055 if heavy else 0.035), 0.08 if lethal else 0.15)
 	if lethal:
 		main.rumble(0.35, 0.75, 0.26)
 	else:
-		main.rumble(0.1, 0.35 if heavy else 0.18, 0.12)
-	mobs.damage(i, dmg, from, knock)
+		main.rumble(0.14 if is_crit else 0.1, 0.5 if is_crit else (0.35 if heavy else 0.18), 0.12)
+	mobs.damage(i, dmg, from, knock * (1.35 if is_crit else 1.0))
 
 
 func spawn_projectile(p: Vector2, d: Vector2, speed: float, dmg: int, faction: String, tint: Color, kind: String = "orb") -> void:
@@ -340,12 +346,12 @@ func spawn_ghost(sprite: Sprite2D, pos: Vector2, col: Color) -> void:
 	tw.tween_callback(g.queue_free)
 
 
-func spawn_popup(text: String, pos: Vector2, col: Color) -> void:
+func spawn_popup(text: String, pos: Vector2, col: Color, size: int = 17) -> void:
 	_popup_guard()
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_override("font", ui_font)
-	l.add_theme_font_size_override("font_size", 17)
+	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
 	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	l.add_theme_constant_override("outline_size", 4)

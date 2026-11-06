@@ -1,747 +1,771 @@
 {
-  "aggro_range": 185.0,
+ "aggro_range": 185.0,
+ "ai": {
+  "arc_blend": 0.22,
+  "flow_recalc_interval": 0.25,
+  "separation": {
+   "max_neighbors": 6,
+   "radius_pad": 10.0,
+   "strength": 16.0
+  },
+  "strafe_ratio": 0.5,
+  "stuck": {
+   "after": 0.45,
+   "nudge_speed": 0.6,
+   "nudge_time": 0.5
+  }
+ },
+ "apc_units": {
+  "mercenary": {
+   "atk": 9,
+   "atk_range": 38.0,
+   "hp": 90,
+   "name": "佣兵·铁岩",
+   "sp": 40,
+   "spd": 145,
+   "sprite": [
+    "res://assets/chars/Actor1.png",
+    0,
+    0
+   ],
+   "weapon": "melee"
+  }
+ },
+ "bag_cap": 20,
+ "boss": {
+  "atk": 15,
+  "atk_range": 42.0,
+  "behavior": "boss",
+  "cool": 1.1,
+  "hp": 280,
+  "name": "魔王·巴洛尔",
+  "scale": 1.5,
+  "spd": 70,
+  "sprite": [
+   "res://assets/chars/Monster.png",
+   288,
+   192
+  ],
+  "windup": 0.5,
+  "xp": 90
+ },
+ "camera": {
+  "base_zoom": 1.7,
+  "fit_bias": 0.9,
+  "focus_rate": 12.0,
+  "look_ahead": 34.0,
+  "margin": 30.0,
+  "max_shot_time": 6.0,
+  "max_speed": 2400.0,
+  "min_zoom": 1.12,
+  "pan_weight": 0.42,
+  "safe_frac": 0.34,
+  "smooth_time": 0.16,
+  "track_ratio": 1.3,
+  "track_release": 1.3,
+  "zoom_deadband": 0.06,
+  "zoom_in_rate": 1.5,
+  "zoom_out_rate": 3.0
+ },
+ "char_skills": {
+  "archer": [
+   "arrow_volley",
+   "holy_light"
+  ],
+  "fencer": [
+   "slash_dash",
+   "piercing_shot"
+  ],
+  "witch": [
+   "flame_nova",
+   "meteor"
+  ]
+ },
+ "chars": {
+  "archer": {
+   "atk": 10,
+   "atk_cd": 0.4,
+   "atk_range": 0.0,
+   "growth": {
+    "atk": 2,
+    "hp": 10
+   },
+   "hp": 92,
+   "name": "弓手·凯",
+   "proj_spd": 430.0,
+   "skill": {
+    "cd": 2.8,
+    "desc": "向前方扇形射出 5 支箭",
+    "name": "迅捷连射",
+    "sp": 20
+   },
+   "sp": 60,
+   "spd": 178,
+   "sprite": [
+    "res://assets/chars/Actor1.png",
+    432,
+    0
+   ],
+   "title": "操作型 · 远程风筝",
+   "weapon": "ranged"
+  },
+  "fencer": {
+   "atk": 12,
+   "atk_cd": 0.34,
+   "atk_range": 38.0,
+   "growth": {
+    "atk": 2,
+    "hp": 14
+   },
+   "hp": 120,
+   "name": "剑士·凛",
+   "skill": {
+    "cd": 2.2,
+    "desc": "向前突进，斩击路径上的敌人",
+    "name": "冲斩",
+    "sp": 18
+   },
+   "sp": 50,
+   "spd": 155,
+   "sprite": [
+    "res://assets/chars/Actor1.png",
+    288,
+    0
+   ],
+   "title": "稳健型 · 近战连段",
+   "weapon": "melee"
+  },
+  "witch": {
+   "atk": 14,
+   "atk_cd": 0.5,
+   "atk_range": 0.0,
+   "growth": {
+    "atk": 2,
+    "hp": 8
+   },
+   "hp": 80,
+   "name": "魔女·伊伊",
+   "proj_spd": 300.0,
+   "skill": {
+    "cd": 3.5,
+    "desc": "爆发火焰环，环射 12 枚火球并震退近身敌人",
+    "name": "烈焰环",
+    "sp": 26
+   },
+   "sp": 95,
+   "spd": 142,
+   "sprite": [
+    "res://assets/chars/Actor1.png",
+    144,
+    192
+   ],
+   "title": "爆发型 · 范围法术",
+   "weapon": "magic"
+  }
+ },
+ "death_loss": 0.5,
+ "drop_base": [
+  [
+   "herb",
+   5
+  ],
+  [
+   "ore",
+   3
+  ],
+  [
+   "potion",
+   2
+  ]
+ ],
+ "drop_f2_add": [
+  [
+   "gems",
+   1
+  ]
+ ],
+ "drop_f4_add": [
+  [
+   "orb",
+   1
+  ]
+ ],
+ "drops": {
+  "boss_mult": 6.0,
+  "common": {
+   "arrive_dist": 12.0,
+   "attract_delay": 0.28,
+   "attract_radius": 165.0,
+   "attract_speed_end": 820.0,
+   "attract_speed_start": 140.0,
+   "attract_time": 0.42,
+   "bounce": 0.35,
+   "friction": 3.4,
+   "lifetime": 14.0,
+   "scale_end": 0.35,
+   "scale_start": 1.0,
+   "scatter_speed_max": 215.0,
+   "scatter_speed_min": 70.0,
+   "scatter_time": 0.45
+  },
+  "elite_mult": 2.0,
+  "enabled": true,
+  "gem": {
+   "chance": 0.18,
+   "scatter_speed_max": 250.0,
+   "value": 8
+  },
+  "gold": {
+   "count_max": 9,
+   "count_min": 5
+  },
+  "settle_mode": "arrive"
+ },
+ "elite_chance": 0.12,
+ "elite_tint": [
+  1.3,
+  1.15,
+  0.5
+ ],
+ "enemies": {
+  "fox": {
+   "atk": 9,
+   "atk_range": 230.0,
+   "behavior": "ranged",
+   "cool": 1.8,
+   "hp": 26,
+   "keep": 150.0,
+   "name": "妖狐法师",
+   "proj_spd": 260.0,
+   "scale": 1.0,
+   "spd": 68,
+   "sprite": [
+    "res://assets/chars/Monster.png",
+    0,
+    192
+   ],
+   "windup": 0.6,
+   "xp": 10
+  },
+  "harpy": {
+   "atk": 8,
+   "atk_range": 28.0,
+   "behavior": "melee",
+   "cool": 1.0,
+   "hp": 26,
+   "name": "鹰身女妖",
+   "scale": 1.0,
+   "spd": 115,
+   "sprite": [
+    "res://assets/chars/Monster.png",
+    0,
+    0
+   ],
+   "windup": 0.4,
+   "xp": 6
+  },
+  "imp": {
+   "atk": 6,
+   "atk_range": 26.0,
+   "behavior": "melee",
+   "cool": 0.9,
+   "hp": 22,
+   "name": "魔物幼体",
+   "scale": 0.9,
+   "spd": 95,
+   "sprite": [
+    "res://assets/chars/Monster.png",
+    144,
+    192
+   ],
+   "windup": 0.35,
+   "xp": 4
+  },
+  "knight": {
+   "atk": 13,
+   "atk_range": 32.0,
+   "behavior": "melee",
+   "cool": 1.4,
+   "hp": 70,
+   "name": "黑铁骑士",
+   "scale": 1.1,
+   "spd": 62,
+   "sprite": [
+    "res://assets/chars/Monster.png",
+    432,
+    0
+   ],
+   "windup": 0.55,
+   "xp": 14
+  },
+  "orc": {
+   "atk": 11,
+   "atk_range": 30.0,
+   "behavior": "melee",
+   "cool": 1.2,
+   "hp": 44,
+   "name": "兽人",
+   "scale": 1.05,
+   "spd": 72,
+   "sprite": [
+    "res://assets/chars/Monster.png",
+    144,
+    0
+   ],
+   "windup": 0.5,
+   "xp": 9
+  },
+  "wolf": {
+   "atk": 9,
+   "atk_range": 28.0,
+   "behavior": "melee",
+   "cool": 0.8,
+   "hp": 30,
+   "name": "座狼",
+   "scale": 1.0,
+   "spd": 140,
+   "sprite": [
+    "res://assets/chars/Monster.png",
+    288,
+    0
+   ],
+   "windup": 0.3,
+   "xp": 8
+  }
+ },
+ "equip_slots": [
+  "weapon",
+  "armor",
+  "trinket"
+ ],
+ "equipment": {
+  "armor_leather": {
+   "def": 2,
+   "hp": 10,
+   "name": "皮甲",
+   "price": 50,
+   "slot": "armor",
+   "tier": 1
+  },
+  "armor_plate": {
+   "def": 5,
+   "hp": 25,
+   "name": "板甲",
+   "price": 200,
+   "slot": "armor",
+   "tier": 2
+  },
+  "sword_flame": {
+   "atk": 7,
+   "name": "焰纹剑",
+   "price": 220,
+   "slot": "weapon",
+   "tier": 2
+  },
+  "sword_iron": {
+   "atk": 3,
+   "name": "铁剑",
+   "price": 60,
+   "slot": "weapon",
+   "tier": 1
+  },
+  "trinket_ring": {
+   "name": "回响指环",
+   "price": 120,
+   "slot": "trinket",
+   "sp": 20,
+   "tier": 1
+  }
+ },
+ "floor_enemy_count_base": 5,
+ "floor_enemy_count_per": 2,
+ "floor_pools": {
+  "1": [
+   [
+    "imp",
+    5
+   ],
+   [
+    "harpy",
+    3
+   ]
+  ],
+  "2": [
+   [
+    "imp",
+    3
+   ],
+   [
+    "harpy",
+    3
+   ],
+   [
+    "orc",
+    3
+   ],
+   [
+    "wolf",
+    2
+   ]
+  ],
+  "3": [
+   [
+    "orc",
+    4
+   ],
+   [
+    "wolf",
+    3
+   ],
+   [
+    "fox",
+    2
+   ],
+   [
+    "imp",
+    2
+   ]
+  ],
+  "4": [
+   [
+    "orc",
+    3
+   ],
+   [
+    "wolf",
+    3
+   ],
+   [
+    "fox",
+    3
+   ],
+   [
+    "knight",
+    2
+   ]
+  ],
+  "5": [
+   [
+    "knight",
+    3
+   ],
+   [
+    "fox",
+    3
+   ],
+   [
+    "orc",
+    2
+   ],
+   [
+    "wolf",
+    2
+   ]
+  ]
+ },
+ "gold_drop_max": 6,
+ "gold_drop_min": 2,
+ "items": {
+  "gems": {
+   "kind": "goods",
+   "name": "魔石",
+   "tint": [
+    0.45,
+    0.6,
+    1.0
+   ],
+   "value": 60
+  },
+  "herb": {
+   "kind": "goods",
+   "name": "药草",
+   "tint": [
+    0.45,
+    0.9,
+    0.55
+   ],
+   "value": 8
+  },
+  "orb": {
+   "kind": "goods",
+   "name": "宝玉",
+   "tint": [
+    1.0,
+    0.75,
+    0.3
+   ],
+   "value": 120
+  },
+  "ore": {
+   "kind": "goods",
+   "name": "铁矿",
+   "tint": [
+    0.68,
+    0.72,
+    0.82
+   ],
+   "value": 22
+  },
+  "potion": {
+   "heal": 50,
+   "kind": "use",
+   "name": "回复药水",
+   "tint": [
+    1.0,
+    0.42,
+    0.48
+   ],
+   "value": 25
+  }
+ },
+ "loot_base": [
+  [
+   "herb",
+   5
+  ],
+  [
+   "ore",
+   4
+  ],
+  [
+   "gems",
+   2
+  ],
+  [
+   "potion",
+   3
+  ]
+ ],
+ "loot_f2_add": [
+  [
+   "gems",
+   2
+  ]
+ ],
+ "loot_f3_add": [
+  [
+   "orb",
+   1
+  ]
+ ],
+ "max_floor": 5,
+ "minimap": {
+  "enabled": true,
+  "height": 132.0,
+  "reveal_interval": 0.12,
+  "reveal_radius": 7,
+  "width": 184.0
+ },
+ "party": {
   "ai": {
-    "arc_blend": 0.22,
-    "flow_recalc_interval": 0.25,
-    "separation": {
-      "max_neighbors": 6,
-      "radius_pad": 10.0,
-      "strength": 16.0
-    },
-    "strafe_ratio": 0.5,
-    "stuck": {
-      "after": 0.45,
-      "nudge_speed": 0.6,
-      "nudge_time": 0.5
+   "aim_max_lead": 0.55,
+   "arrive_radius": 28.0,
+   "assist_idle_radius": 200.0,
+   "assist_radius": 300.0,
+   "blacklist_time": 5.0,
+   "hold_leash": 1.6,
+   "los_penalty": 0.9,
+   "pickup_threat_radius": 220.0,
+   "ranged_engage": 265.0,
+   "ranged_keep_max": 225.0,
+   "ranged_keep_min": 125.0,
+   "reach_timeout": 6.0,
+   "resume_radius": 48.0,
+   "self_defense_radius": 150.0,
+   "skill_min_enemies": 2,
+   "stick_bonus": 0.6,
+   "stuck_regroup": 1.5,
+   "stuck_repath": 0.3,
+   "stuck_sidestep": 0.75,
+   "stuck_teleport": 2.5,
+   "switch_margin": 1.25
+  },
+  "apc_tags": {
+   "mercenary": {
+    "can_command": true,
+    "can_possess": false,
+    "counts_to_cap": false,
+    "temporary": true
+   }
+  },
+  "command": {
+   "active": {
+    "leash_radius": 320.0,
+    "low_hp_retreat": 0.25,
+    "no_enemy": "follow",
+    "pickup": true,
+    "protect_player": true,
+    "search_radius": 340.0
+   },
+   "follow": {
+    "engage_radius": 300.0,
+    "engage_with_player": true,
+    "follow_distance": 110.0,
+    "pickup": true,
+    "spread": 52.0
+   },
+   "hold": {
+    "defense_radius": 70.0,
+    "pickup": false,
+    "self_defense": true
+   }
+  },
+  "far_think_multiplier": 3.0,
+  "far_unit_distance": 1200.0,
+  "friend_potion_use": false,
+  "friend_sp_regen": 3.0,
+  "low_hp_retreat_ratio": 0.25,
+  "max_party_size": 8,
+  "nav_repath_interval": 0.8,
+  "possession_cooldown": 1.5,
+  "revive_on_floor_change": true,
+  "revive_ratio": 0.5,
+  "start_friends": 2,
+  "think_interval": 0.15,
+  "xp_share_ratio": 1.0
+ },
+ "quests": {
+  "q_intro": {
+   "name": "序章·进入千渊",
+   "desc": "踏入千渊地牢（到达地下 1 层）",
+   "type": "reach_floor",
+   "target": "floor",
+   "count": 1,
+   "rewards": {
+    "gold": 50
+   }
+  },
+  "q_hunt": {
+   "name": "一章·清剿魔物",
+   "desc": "击败 8 只任意魔物",
+   "type": "kill",
+   "target": "any",
+   "count": 8,
+   "requires": "q_intro",
+   "rewards": {
+    "gold": 60,
+    "xp": 20,
+    "item": {
+     "potion": 2
     }
+   }
   },
-  "apc_units": {
-    "mercenary": {
-      "atk": 9,
-      "atk_range": 38.0,
-      "hp": 90,
-      "name": "佣兵·铁岩",
-      "sp": 40,
-      "spd": 145,
-      "sprite": [
-        "res://assets/chars/Actor1.png",
-        0,
-        0
-      ],
-      "weapon": "melee"
+  "q_ore": {
+   "name": "二章·矿脉打捞",
+   "desc": "拾取 5 个铁矿",
+   "type": "collect",
+   "target": "ore",
+   "count": 5,
+   "requires": "q_hunt",
+   "rewards": {
+    "gold": 80,
+    "item": {
+     "sword_iron": 1
     }
+   }
   },
-  "bag_cap": 20,
-  "boss": {
-    "atk": 15,
-    "atk_range": 42.0,
-    "behavior": "boss",
-    "cool": 1.1,
-    "hp": 280,
-    "name": "魔王·巴洛尔",
-    "scale": 1.5,
-    "spd": 70,
-    "sprite": [
-      "res://assets/chars/Monster.png",
-      288,
-      192
-    ],
-    "windup": 0.5,
-    "xp": 90
+  "q_depth": {
+   "name": "三章·深入四层",
+   "desc": "到达地下 4 层",
+   "type": "reach_floor",
+   "target": "floor",
+   "count": 4,
+   "requires": "q_ore",
+   "rewards": {
+    "gold": 100,
+    "xp": 40
+   }
   },
-  "camera": {
-    "base_zoom": 1.7,
-    "fit_bias": 0.9,
-    "focus_rate": 12.0,
-    "look_ahead": 34.0,
-    "margin": 30.0,
-    "max_shot_time": 6.0,
-    "max_speed": 2400.0,
-    "min_zoom": 1.12,
-    "pan_weight": 0.42,
-    "safe_frac": 0.34,
-    "smooth_time": 0.16,
-    "track_ratio": 1.3,
-    "track_release": 1.3,
-    "zoom_deadband": 0.06,
-    "zoom_in_rate": 1.5,
-    "zoom_out_rate": 3.0
-  },
-  "char_skills": {
-    "archer": [
-      "arrow_volley",
-      "holy_light"
-    ],
-    "fencer": [
-      "slash_dash",
-      "piercing_shot"
-    ],
-    "witch": [
-      "flame_nova",
-      "meteor"
-    ]
-  },
-  "chars": {
-    "archer": {
-      "atk": 10,
-      "atk_cd": 0.4,
-      "atk_range": 0.0,
-      "growth": {
-        "atk": 2,
-        "hp": 10
-      },
-      "hp": 92,
-      "name": "弓手·凯",
-      "proj_spd": 430.0,
-      "skill": {
-        "cd": 2.8,
-        "desc": "向前方扇形射出 5 支箭",
-        "name": "迅捷连射",
-        "sp": 20
-      },
-      "sp": 60,
-      "spd": 178,
-      "sprite": [
-        "res://assets/chars/Actor1.png",
-        432,
-        0
-      ],
-      "title": "操作型 · 远程风筝",
-      "weapon": "ranged"
-    },
-    "fencer": {
-      "atk": 12,
-      "atk_cd": 0.34,
-      "atk_range": 38.0,
-      "growth": {
-        "atk": 2,
-        "hp": 14
-      },
-      "hp": 120,
-      "name": "剑士·凛",
-      "skill": {
-        "cd": 2.2,
-        "desc": "向前突进，斩击路径上的敌人",
-        "name": "冲斩",
-        "sp": 18
-      },
-      "sp": 50,
-      "spd": 155,
-      "sprite": [
-        "res://assets/chars/Actor1.png",
-        288,
-        0
-      ],
-      "title": "稳健型 · 近战连段",
-      "weapon": "melee"
-    },
-    "witch": {
-      "atk": 14,
-      "atk_cd": 0.5,
-      "atk_range": 0.0,
-      "growth": {
-        "atk": 2,
-        "hp": 8
-      },
-      "hp": 80,
-      "name": "魔女·伊伊",
-      "proj_spd": 300.0,
-      "skill": {
-        "cd": 3.5,
-        "desc": "爆发火焰环，环射 12 枚火球并震退近身敌人",
-        "name": "烈焰环",
-        "sp": 26
-      },
-      "sp": 95,
-      "spd": 142,
-      "sprite": [
-        "res://assets/chars/Actor1.png",
-        144,
-        192
-      ],
-      "title": "爆发型 · 范围法术",
-      "weapon": "magic"
-    }
-  },
-  "death_loss": 0.5,
-  "drop_base": [
-    [
-      "herb",
-      5
-    ],
-    [
-      "ore",
-      3
-    ],
-    [
-      "potion",
-      2
-    ]
+  "q_boss": {
+   "name": "终章·讨伐守窟者",
+   "desc": "击败魔王巴洛尔",
+   "type": "kill",
+   "target": "boss",
+   "count": 1,
+   "requires": "q_depth",
+   "rewards": {
+    "gold": 300,
+    "xp": 60
+   }
+  }
+ },
+ "sell_ratio": 0.6,
+ "shop_stock": {
+  "always": [
+   "potion",
+   "herb"
   ],
-  "drop_f2_add": [
-    [
-      "gems",
-      1
-    ]
+  "tier2": [
+   "sword_iron",
+   "armor_leather",
+   "trinket_ring"
   ],
-  "drop_f4_add": [
-    [
-      "orb",
-      1
-    ]
-  ],
-  "drops": {
-    "boss_mult": 6.0,
-    "common": {
-      "arrive_dist": 12.0,
-      "attract_delay": 0.28,
-      "attract_radius": 165.0,
-      "attract_speed_end": 820.0,
-      "attract_speed_start": 140.0,
-      "attract_time": 0.42,
-      "bounce": 0.35,
-      "friction": 3.4,
-      "lifetime": 14.0,
-      "scale_end": 0.35,
-      "scale_start": 1.0,
-      "scatter_speed_max": 215.0,
-      "scatter_speed_min": 70.0,
-      "scatter_time": 0.45
-    },
-    "elite_mult": 2.0,
-    "enabled": true,
-    "gem": {
-      "chance": 0.18,
-      "scatter_speed_max": 250.0,
-      "value": 8
-    },
-    "gold": {
-      "count_max": 9,
-      "count_min": 5
-    },
-    "settle_mode": "arrive"
+  "tier3": [
+   "sword_flame",
+   "armor_plate"
+  ]
+ },
+ "skills": {
+  "arrow_volley": {
+   "cd": 2.8,
+   "desc": "向前方扇形射出 5 支箭",
+   "dmg_mult": 1.0,
+   "kind": "volley",
+   "name": "迅捷连射",
+   "sp": 20,
+   "unlock_level": 1
   },
-  "elite_chance": 0.12,
-  "elite_tint": [
-    1.3,
-    1.15,
-    0.5
-  ],
-  "enemies": {
-    "fox": {
-      "atk": 9,
-      "atk_range": 230.0,
-      "behavior": "ranged",
-      "cool": 1.8,
-      "hp": 26,
-      "keep": 150.0,
-      "name": "妖狐法师",
-      "proj_spd": 260.0,
-      "scale": 1.0,
-      "spd": 68,
-      "sprite": [
-        "res://assets/chars/Monster.png",
-        0,
-        192
-      ],
-      "windup": 0.6,
-      "xp": 10
-    },
-    "harpy": {
-      "atk": 8,
-      "atk_range": 28.0,
-      "behavior": "melee",
-      "cool": 1.0,
-      "hp": 26,
-      "name": "鹰身女妖",
-      "scale": 1.0,
-      "spd": 115,
-      "sprite": [
-        "res://assets/chars/Monster.png",
-        0,
-        0
-      ],
-      "windup": 0.4,
-      "xp": 6
-    },
-    "imp": {
-      "atk": 6,
-      "atk_range": 26.0,
-      "behavior": "melee",
-      "cool": 0.9,
-      "hp": 22,
-      "name": "魔物幼体",
-      "scale": 0.9,
-      "spd": 95,
-      "sprite": [
-        "res://assets/chars/Monster.png",
-        144,
-        192
-      ],
-      "windup": 0.35,
-      "xp": 4
-    },
-    "knight": {
-      "atk": 13,
-      "atk_range": 32.0,
-      "behavior": "melee",
-      "cool": 1.4,
-      "hp": 70,
-      "name": "黑铁骑士",
-      "scale": 1.1,
-      "spd": 62,
-      "sprite": [
-        "res://assets/chars/Monster.png",
-        432,
-        0
-      ],
-      "windup": 0.55,
-      "xp": 14
-    },
-    "orc": {
-      "atk": 11,
-      "atk_range": 30.0,
-      "behavior": "melee",
-      "cool": 1.2,
-      "hp": 44,
-      "name": "兽人",
-      "scale": 1.05,
-      "spd": 72,
-      "sprite": [
-        "res://assets/chars/Monster.png",
-        144,
-        0
-      ],
-      "windup": 0.5,
-      "xp": 9
-    },
-    "wolf": {
-      "atk": 9,
-      "atk_range": 28.0,
-      "behavior": "melee",
-      "cool": 0.8,
-      "hp": 30,
-      "name": "座狼",
-      "scale": 1.0,
-      "spd": 140,
-      "sprite": [
-        "res://assets/chars/Monster.png",
-        288,
-        0
-      ],
-      "windup": 0.3,
-      "xp": 8
-    }
+  "flame_nova": {
+   "cd": 3.5,
+   "desc": "爆发火焰环，环射 12 枚火球",
+   "dmg_mult": 1.4,
+   "kind": "nova",
+   "name": "烈焰环",
+   "sp": 26,
+   "unlock_level": 1
   },
-  "equip_slots": [
-    "weapon",
-    "armor",
-    "trinket"
-  ],
-  "equipment": {
-    "armor_leather": {
-      "def": 2,
-      "hp": 10,
-      "name": "皮甲",
-      "price": 50,
-      "slot": "armor",
-      "tier": 1
-    },
-    "armor_plate": {
-      "def": 5,
-      "hp": 25,
-      "name": "板甲",
-      "price": 200,
-      "slot": "armor",
-      "tier": 2
-    },
-    "sword_flame": {
-      "atk": 7,
-      "name": "焰纹剑",
-      "price": 220,
-      "slot": "weapon",
-      "tier": 2
-    },
-    "sword_iron": {
-      "atk": 3,
-      "name": "铁剑",
-      "price": 60,
-      "slot": "weapon",
-      "tier": 1
-    },
-    "trinket_ring": {
-      "name": "回响指环",
-      "price": 120,
-      "slot": "trinket",
-      "sp": 20,
-      "tier": 1
-    }
+  "holy_light": {
+   "cd": 5.0,
+   "desc": "回复 35% 最大生命",
+   "heal": 0.35,
+   "kind": "heal",
+   "name": "圣光术",
+   "sp": 20,
+   "unlock_level": 3
   },
-  "floor_enemy_count_base": 5,
-  "floor_enemy_count_per": 2,
-  "floor_pools": {
-    "1": [
-      [
-        "imp",
-        5
-      ],
-      [
-        "harpy",
-        3
-      ]
-    ],
-    "2": [
-      [
-        "imp",
-        3
-      ],
-      [
-        "harpy",
-        3
-      ],
-      [
-        "orc",
-        3
-      ],
-      [
-        "wolf",
-        2
-      ]
-    ],
-    "3": [
-      [
-        "orc",
-        4
-      ],
-      [
-        "wolf",
-        3
-      ],
-      [
-        "fox",
-        2
-      ],
-      [
-        "imp",
-        2
-      ]
-    ],
-    "4": [
-      [
-        "orc",
-        3
-      ],
-      [
-        "wolf",
-        3
-      ],
-      [
-        "fox",
-        3
-      ],
-      [
-        "knight",
-        2
-      ]
-    ],
-    "5": [
-      [
-        "knight",
-        3
-      ],
-      [
-        "fox",
-        3
-      ],
-      [
-        "orc",
-        2
-      ],
-      [
-        "wolf",
-        2
-      ]
-    ]
+  "meteor": {
+   "cd": 4.5,
+   "desc": "更强的爆炎与冲击",
+   "dmg_mult": 1.8,
+   "kind": "nova",
+   "name": "陨星术",
+   "sp": 32,
+   "unlock_level": 6
   },
-  "gold_drop_max": 6,
-  "gold_drop_min": 2,
-  "items": {
-    "gems": {
-      "kind": "goods",
-      "name": "魔石",
-      "tint": [
-        0.45,
-        0.6,
-        1.0
-      ],
-      "value": 60
-    },
-    "herb": {
-      "kind": "goods",
-      "name": "药草",
-      "tint": [
-        0.45,
-        0.9,
-        0.55
-      ],
-      "value": 8
-    },
-    "orb": {
-      "kind": "goods",
-      "name": "宝玉",
-      "tint": [
-        1.0,
-        0.75,
-        0.3
-      ],
-      "value": 120
-    },
-    "ore": {
-      "kind": "goods",
-      "name": "铁矿",
-      "tint": [
-        0.68,
-        0.72,
-        0.82
-      ],
-      "value": 22
-    },
-    "potion": {
-      "heal": 50,
-      "kind": "use",
-      "name": "回复药水",
-      "tint": [
-        1.0,
-        0.42,
-        0.48
-      ],
-      "value": 25
-    }
+  "piercing_shot": {
+   "cd": 3.0,
+   "desc": "五连矢，更快更痛",
+   "dmg_mult": 1.5,
+   "kind": "volley",
+   "name": "穿透箭",
+   "sp": 24,
+   "unlock_level": 5
   },
-  "loot_base": [
-    [
-      "herb",
-      5
-    ],
-    [
-      "ore",
-      4
-    ],
-    [
-      "gems",
-      2
-    ],
-    [
-      "potion",
-      3
-    ]
-  ],
-  "loot_f2_add": [
-    [
-      "gems",
-      2
-    ]
-  ],
-  "loot_f3_add": [
-    [
-      "orb",
-      1
-    ]
-  ],
-  "max_floor": 5,
-  "minimap": {
-    "enabled": true,
-    "height": 132.0,
-    "reveal_interval": 0.12,
-    "reveal_radius": 7,
-    "width": 184.0
-  },
-  "party": {
-    "ai": {
-      "aim_max_lead": 0.55,
-      "arrive_radius": 28.0,
-      "assist_idle_radius": 200.0,
-      "assist_radius": 300.0,
-      "blacklist_time": 5.0,
-      "hold_leash": 1.6,
-      "los_penalty": 0.9,
-      "pickup_threat_radius": 220.0,
-      "ranged_engage": 265.0,
-      "ranged_keep_max": 225.0,
-      "ranged_keep_min": 125.0,
-      "reach_timeout": 6.0,
-      "resume_radius": 48.0,
-      "self_defense_radius": 150.0,
-      "skill_min_enemies": 2,
-      "stick_bonus": 0.6,
-      "stuck_regroup": 1.5,
-      "stuck_repath": 0.3,
-      "stuck_sidestep": 0.75,
-      "stuck_teleport": 2.5,
-      "switch_margin": 1.25
-    },
-    "apc_tags": {
-      "mercenary": {
-        "can_command": true,
-        "can_possess": false,
-        "counts_to_cap": false,
-        "temporary": true
-      }
-    },
-    "command": {
-      "active": {
-        "leash_radius": 320.0,
-        "low_hp_retreat": 0.25,
-        "no_enemy": "follow",
-        "pickup": true,
-        "protect_player": true,
-        "search_radius": 340.0
-      },
-      "follow": {
-        "engage_radius": 300.0,
-        "engage_with_player": true,
-        "follow_distance": 110.0,
-        "pickup": true,
-        "spread": 52.0
-      },
-      "hold": {
-        "defense_radius": 70.0,
-        "pickup": false,
-        "self_defense": true
-      }
-    },
-    "far_think_multiplier": 3.0,
-    "far_unit_distance": 1200.0,
-    "friend_potion_use": false,
-    "friend_sp_regen": 3.0,
-    "low_hp_retreat_ratio": 0.25,
-    "max_party_size": 8,
-    "nav_repath_interval": 0.8,
-    "possession_cooldown": 1.5,
-    "revive_on_floor_change": true,
-    "revive_ratio": 0.5,
-    "start_friends": 2,
-    "think_interval": 0.15,
-    "xp_share_ratio": 1.0
-  },
-  "quests": {
-    "q_boss": {
-      "count": 1,
-      "desc": "击败魔王巴洛尔",
-      "name": "魔王讨伐",
-      "rewards": {
-        "gold": 200
-      },
-      "target": "boss",
-      "type": "kill"
-    },
-    "q_depth": {
-      "count": 3,
-      "desc": "到达地下 3 层",
-      "name": "深入地牢",
-      "rewards": {
-        "gold": 60
-      },
-      "type": "reach_floor"
-    },
-    "q_hunt": {
-      "count": 8,
-      "desc": "击败 8 只任意魔物",
-      "name": "讨伐魔物",
-      "rewards": {
-        "gold": 40,
-        "xp": 20
-      },
-      "target": "any",
-      "type": "kill"
-    },
-    "q_ore": {
-      "count": 5,
-      "desc": "拾取 5 个铁矿",
-      "name": "铁矿收集",
-      "rewards": {
-        "gold": 30,
-        "item": {
-          "potion": 2
-        }
-      },
-      "target": "ore",
-      "type": "collect"
-    }
-  },
-  "sell_ratio": 0.6,
-  "shop_stock": {
-    "always": [
-      "potion",
-      "herb"
-    ],
-    "tier2": [
-      "sword_iron",
-      "armor_leather",
-      "trinket_ring"
-    ],
-    "tier3": [
-      "sword_flame",
-      "armor_plate"
-    ]
-  },
-  "skills": {
-    "arrow_volley": {
-      "cd": 2.8,
-      "desc": "向前方扇形射出 5 支箭",
-      "dmg_mult": 1.0,
-      "kind": "volley",
-      "name": "迅捷连射",
-      "sp": 20,
-      "unlock_level": 1
-    },
-    "flame_nova": {
-      "cd": 3.5,
-      "desc": "爆发火焰环，环射 12 枚火球",
-      "dmg_mult": 1.4,
-      "kind": "nova",
-      "name": "烈焰环",
-      "sp": 26,
-      "unlock_level": 1
-    },
-    "holy_light": {
-      "cd": 5.0,
-      "desc": "回复 35% 最大生命",
-      "heal": 0.35,
-      "kind": "heal",
-      "name": "圣光术",
-      "sp": 20,
-      "unlock_level": 3
-    },
-    "meteor": {
-      "cd": 4.5,
-      "desc": "更强的爆炎与冲击",
-      "dmg_mult": 1.8,
-      "kind": "nova",
-      "name": "陨星术",
-      "sp": 32,
-      "unlock_level": 6
-    },
-    "piercing_shot": {
-      "cd": 3.0,
-      "desc": "五连矢，更快更痛",
-      "dmg_mult": 1.5,
-      "kind": "volley",
-      "name": "穿透箭",
-      "sp": 24,
-      "unlock_level": 5
-    },
-    "slash_dash": {
-      "cd": 2.2,
-      "desc": "向前突进，斩击路径上的敌人",
-      "dmg_mult": 1.7,
-      "kind": "dash",
-      "name": "冲斩",
-      "sp": 18,
-      "unlock_level": 1
-    }
-  },
-  "trap_chance": 0.45,
-  "xp_base": 18,
-  "xp_per_level": 14
+  "slash_dash": {
+   "cd": 2.2,
+   "desc": "向前突进，斩击路径上的敌人",
+   "dmg_mult": 1.7,
+   "kind": "dash",
+   "name": "冲斩",
+   "sp": 18,
+   "unlock_level": 1
+  }
+ },
+ "trap_chance": 0.45,
+ "xp_base": 18,
+ "xp_per_level": 14,
+ "combat": {
+  "crit_chance": 0.12,
+  "crit_mult": 1.8
+ }
 }
