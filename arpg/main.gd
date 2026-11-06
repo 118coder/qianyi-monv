@@ -994,6 +994,12 @@ func on_mob_dead(i: int) -> void:
 		hud.log("魔王倒下了！传送门出现在它倒下的地方——")
 		audio.play_music("town")
 		world.set_portal(world.mobs.pos[i])
+		# Boss 专属掉落：直接入包（商店不卖的战利品，终结感的实物奖励）
+		var sigil: String = str(ArpgBalance.data.get("boss_drop", {}).get("item", ""))
+		if sigil != "" and ArpgBalance.data.get("equipment", {}).has(sigil) and rpg.inventory.add(sigil):
+			var sname: String = str(ArpgBalance.data["equipment"][sigil].get("name", sigil))
+			hud.log("魔王掉落了「%s」！（饰品栏可装备）" % sname)
+			world.spawn_nova(player.position if player != null else world.mobs.pos[i], Color(1.0, 0.75, 0.3))
 		# 终章剧情：Boss 死亡触发结局对话（事件引擎 unit_death 触发器；mob 是 SoA 数据
 		# 层没有 uid/tpl_id 属性，走字符串适配入口）
 		if events != null and not events_silent:
