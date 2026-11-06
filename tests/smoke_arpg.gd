@@ -264,6 +264,13 @@ func _run() -> void:
 	main.altar_atk_mult = 1.3
 	_check(main.world.altar_node == null, "祭坛节点可空（未生成本层）")
 	main.altar_atk_mult = 1.0
+	# 剧情入队：spawn_friend 落点（队伍人数 +1、命令不崩、事件文件里已编排）
+	var friends0: int = main.party.friends.size()
+	main.spawn_friend_at("archer")
+	_check(main.party.friends.size() == friends0 + 1, "spawn_friend 入队（%d→%d）" % [friends0, main.party.friends.size()])
+	var ev_f := FileAccess.open("res://data/maps/arpg_events.json", FileAccess.READ)
+	var ev_txt: String = ev_f.get_as_text() if ev_f != null else ""
+	_check("spawn_friend" in ev_txt, "二层剧情已编排入队事件")
 	# 队友台词：数据齐 + 概率配置在
 	var bq: Dictionary = ArpgBalance.data.get("battle_quotes", {})
 	var quotes_ok: bool = bq.size() >= 3

@@ -14,6 +14,7 @@ const MARGIN := 24.0
 const NODE_TYPES := {
 	"dialogue": ["对话", Color(0.25, 0.42, 0.75), "＋对话"],
 	"spawn": ["增援", Color(0.75, 0.45, 0.2), "＋增援"],
+	"spawn_friend": ["队友入队", Color(0.35, 0.65, 0.45), "＋队友"],
 	"set_flag": ["设旗标", Color(0.5, 0.35, 0.7), "＋旗标"],
 	"if": ["条件分支", Color(0.2, 0.55, 0.55), "＋条件"],
 	"camera": ["镜头调度", Color(0.3, 0.5, 0.3), "＋镜头"],
@@ -99,6 +100,8 @@ static func new_command(cmd: String) -> Dictionary:
 			return {"cmd": "dialogue", "speaker": "narrator", "lines": ["……"]}
 		"spawn":
 			return {"cmd": "spawn", "tpl": "orc", "cells": []}
+		"spawn_friend":
+			return {"cmd": "spawn_friend", "tpl": "archer"}
 		"set_flag":
 			return {"cmd": "set_flag", "flag": "flag_1", "value": true}
 		"if":
