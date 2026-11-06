@@ -45,6 +45,12 @@ const CMDS := {
 				"tip": "格式 [[x,y],...]，格坐标以地图左上角为原点"},
 		],
 	},
+	"spawn_friend": {
+		"zh": "队友入队", "col": Color(0.35, 0.65, 0.45),
+		"fields": [
+			{"k": "tpl", "t": "char", "zh": "职业", "def": "archer"},
+		],
+	},
 	"set_flag": {
 		"zh": "设旗标", "col": Color(0.5, 0.35, 0.7),
 		"fields": [
