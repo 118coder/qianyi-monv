@@ -259,6 +259,21 @@ func _run() -> void:
 	main.hud.close_shop()
 	_check(not main.hud.shop_root.visible and not paused, "商店关闭且世界恢复")
 	main.hud.shop_root.visible = shop_was
+	# 血祭坛：献祭换攻击光环（伤害全局乘区）+ 换层重置
+	var atk_probe: int = main.world.mobs.count
+	main.altar_atk_mult = 1.3
+	_check(main.world.altar_node == null, "祭坛节点可空（未生成本层）")
+	main.altar_atk_mult = 1.0
+	# 队友台词：数据齐 + 概率配置在
+	var bq: Dictionary = ArpgBalance.data.get("battle_quotes", {})
+	var quotes_ok: bool = bq.size() >= 3
+	if quotes_ok:
+		for k in bq:
+			if bq[k].size() < 3:
+				quotes_ok = false
+	_check(quotes_ok, "三职业台词表齐备")
+	_check(float(ArpgBalance.data.get("quote_chance", 0)) > 0 and float(ArpgBalance.data.get("altar_chance", 0)) > 0,
+		"台词/祭坛概率已载入")
 	# 商店：买入校验/卖出
 	main.rpg.inventory.remove("ore", 99)
 	main.rpg.gold = 500

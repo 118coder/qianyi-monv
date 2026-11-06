@@ -796,5 +796,27 @@
   }
  },
  "affix_chance": 0.7,
- "merchant_chance": 0.25
+ "merchant_chance": 0.25,
+ "altar_chance": 0.2,
+ "battle_quotes": {
+  "fencer": [
+   "痛快！",
+   "下一个！",
+   "就这？",
+   "保持队形！"
+  ],
+  "witch": [
+   "魔法就是真理～",
+   "灰尘一个。",
+   "别碰我的袍子！",
+   "统计：敌方-1。"
+  ],
+  "archer": [
+   "一箭一个。",
+   "风里没有阻碍。",
+   "左翼安全。",
+   "稳住，别浪。"
+  ]
+ },
+ "quote_chance": 0.15
 }

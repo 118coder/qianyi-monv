@@ -131,6 +131,7 @@ func mobs_in_radius(pos: Vector2, r: float) -> PackedInt32Array:
 
 ## 伤害入口：浮动 + 暴击 + 伤害数字 + 火花 + 顿帧 + 震屏 + 震动；斩杀/暴击加重
 func damage_mob(i: int, base: int, from: Vector2, knock: float = 150.0, heavy: bool = false) -> void:
+	base = roundi(base * main.altar_atk_mult)   # 血祭坛全局攻击光环（玩家+队友所有伤害）
 	var combat: Dictionary = ArpgBalance.data.get("combat", {})
 	var is_crit: bool = randf() < float(combat.get("crit_chance", 0.12))
 	var dmg := maxi(1, roundi(base * randf_range(0.85, 1.15) * (float(combat.get("crit_mult", 1.8)) if is_crit else 1.0)))
@@ -198,6 +199,23 @@ func set_portal(pos: Vector2) -> void:
 	add_child(p)
 
 
+## 血祭坛：E 键献祭（扣 30% 生命换全队攻击 +30%，本层有效）
+func spawn_altar(cell: Vector2i) -> void:
+	var a := AltarNode.new()
+	a.position = ArpgDungeon.cell_to_pos(cell)
+	add_child(a)
+	altar_node = a
+
+
+var altar_node: Node2D = null
+
+
+func clear_altar() -> void:
+	if altar_node != null and is_instance_valid(altar_node):
+		altar_node.queue_free()
+	altar_node = null
+
+
 func portal_dist(pos: Vector2) -> float:
 	if portal_cell.x < 0:
 		return INF
@@ -226,6 +244,22 @@ class PortalNode extends Node2D:
 			var col := Color(0.6, 0.5, 1.0, 0.85 - i * 0.22)
 			draw_arc(Vector2.ZERO, r, t * (1.5 + i), t * (1.5 + i) + TAU * 0.72, 24, col, 3.0)
 		draw_circle(Vector2.ZERO, 5.0 + sin(t * 5.0) * 1.5, Color(0.9, 0.85, 1.0, 0.9))
+
+
+## 血祭坛：暗红石台 + 脉动红光（风险换力量的视觉信号）
+class AltarNode extends Node2D:
+	var t := 0.0
+
+	func _process(delta: float) -> void:
+		t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		draw_rect(Rect2(-13, -8, 26, 18), Color(0.16, 0.07, 0.08), true)
+		draw_rect(Rect2(-13, -8, 26, 18), Color(0.45, 0.12, 0.14), false, 2.0)
+		var pulse: float = 0.55 + 0.45 * sin(t * 3.2)
+		draw_circle(Vector2(0, -10), 5.0 + pulse * 2.0, Color(0.9, 0.2, 0.22, 0.75 + pulse * 0.2))
+		draw_circle(Vector2(0, 12), 6.0, Color(0, 0, 0, 0.25))
 
 
 # ———————— 特效（有上限池：超出释放最旧，保证帧率恒定） ————————
