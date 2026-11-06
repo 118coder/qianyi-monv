@@ -14,6 +14,7 @@ const SFX := {
 	"heal": "res://assets/se/Heal1.ogg",
 	"fire": "res://assets/se/Fire1.ogg",
 	"magic": "res://assets/se/Magic2.ogg",
+	"coin": "res://assets/se/Magic1.ogg",
 }
 
 var state := State.SELECT
@@ -303,6 +304,7 @@ func _setup_input() -> void:
 		"load_party": [KEY_F10],
 		"char_menu": [KEY_C],
 		"skill2": [KEY_L],
+		"skill3": [KEY_U],
 		"reload_balance": [KEY_F2],
 		"reload_map": [KEY_F3],
 		"restart_run": [KEY_F4],
@@ -940,6 +942,14 @@ func on_drop_collected(_kind: int, value: int) -> void:
 func on_mob_dead(i: int) -> void:
 	kills += 1
 	play_sfx("die")
+	# 击杀里程碑：每 25 杀结算一次赏金（正反馈节拍，数字在 balance.milestone）
+	var ms_step: int = int(ArpgBalance.data.get("milestone", {}).get("every", 25))
+	var ms_gold: int = int(ArpgBalance.data.get("milestone", {}).get("gold", 40))
+	if ms_step > 0 and kills % ms_step == 0 and player != null and is_instance_valid(player):
+		rpg.gold += ms_gold
+		world.spawn_popup("%d 击杀！赏金 +%dG" % [kills, ms_gold],
+			player.position + Vector2(0, -64), Color(1.0, 0.85, 0.35), 20)
+		play_sfx("coin", -4.0)
 	# 连杀：窗口内继续击杀累计，到 3/5/8 播报（里程碑只在恰好达到时弹，避免每杀都刷屏）
 	combo_n += 1
 	combo_t = float(ArpgBalance.data.get("combo", {}).get("window", 3.0))

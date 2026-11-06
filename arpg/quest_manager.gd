@@ -32,12 +32,12 @@ func _check_done() -> void:
 		if q["state"] == "done" and not q.get("notified", false):
 			q["notified"] = true   # 防重复弹：done 未领奖期间每次触发都会再扫到这里
 			main.hud.log("任务完成：%s（在角色菜单领取奖励）" % defs.get(qid, {}).get("name", qid))
-			main.hud.set_quest_toast(defs.get(qid, {}).get("name", qid))
-			# 任务链：本任务完成 → 下游任务解锁提示
+			main.hud.set_quest_toast("任务完成：%s" % defs.get(qid, {}).get("name", qid))
+			# 任务链：本任务完成 → 下游任务解锁提示（队列轮播，不再叠一行）
 			for other_id in defs:
 				if str(defs[other_id].get("requires", "")) == qid:
 					main.hud.log("新任务解锁：%s" % defs[other_id].get("name", other_id))
-					main.hud.set_quest_toast("新任务：" + str(defs[other_id].get("name", other_id)))
+					main.hud.set_quest_toast("新任务解锁：%s" % str(defs[other_id].get("name", other_id)))
 
 
 func claim(qid: String) -> String:

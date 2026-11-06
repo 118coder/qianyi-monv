@@ -248,6 +248,13 @@ func _draw() -> void:
 			var cp := Vector2(ox + (float(cc.x) + 0.5) * cell, oy + (float(cc.y) + 0.5) * cell)
 			draw_circle(cp, maxf(cell * 0.3, 1.5),
 				Color(0.78, 0.5, 1.0, 0.95) if c.merchant else Color(1.0, 0.85, 0.35, 0.95))
+		# Boss 血量可见时画大红点（BOSS 层的方位感）
+		var bi: int = game.world.mobs.find_boss() if game.world.mobs != null else -1
+		if bi >= 0:
+			var bc := Vector2i((game.world.mobs.pos[bi] / float(ArpgData.TILE)).floor())
+			if _is_seen(bc):
+				draw_circle(Vector2(ox + (float(bc.x) + 0.5) * cell, oy + (float(bc.y) + 0.5) * cell),
+					maxf(cell * 0.45, 2.2), Color(1.0, 0.25, 0.25, 0.95))
 
 	# 队友（只画已探索的）
 	if game.party != null:
