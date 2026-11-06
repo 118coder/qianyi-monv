@@ -94,7 +94,9 @@ var kills := 0
 var combo_n := 0         # 当前连杀数（on_mob_dead 累计，窗口耗尽归零）
 var combo_t := 0.0       # 连杀窗口剩余秒数（balance.combo.window）
 var combo_best := 0      # 本局最高连杀（结算屏展示）
-var _interact_target := {}   # {kind: chest/stairs/portal, node/cell}
+var altar_atk_mult := 1.0   # 血祭坛全局攻击光环（献祭后 1.3，换层重置）
+var quote_cd := 0.0         # 队友战斗台词冷却（防止刷屏）
+var _interact_target := {}   # {kind: chest/stairs/portal/altar, node/cell}
 var _full_warn_ms := 0
 var rng := RandomNumberGenerator.new()
 
@@ -337,6 +339,7 @@ func start_run(id: String) -> void:
 	combo_n = 0
 	combo_t = 0.0
 	combo_best = 0
+	quote_cd = 0.0
 	rpg.setup()   # 刷新背包容量/任务表；金币与物品跨局保留（商店循环）
 	if not rpg.inventory.has("potion"):
 		rpg.inventory.add("potion", 3)
@@ -490,6 +493,12 @@ func build_floor() -> void:
 		# 神秘商人晶体：普通层概率出现（紫色晶体 E 键进店——地牢里的补给惊喜点）
 		if rng.randf() < float(ArpgBalance.data.get("merchant_chance", 0.25)):
 			world.spawn_merchant(dungeon.random_cell_in(dungeon.loot_room(rng)))
+		# 血祭坛：20% 概率，献祭 30% 生命换全队攻击 +30%（本层有效，高风险高回报）
+		altar_atk_mult = 1.0
+		world.clear_altar()
+		if not dungeon.boss_floor and rng.randf() < float(ArpgBalance.data.get("altar_chance", 0.2)):
+			var altar_room: Rect2i = dungeon.rooms[rng.randi_range(1, dungeon.rooms.size() - 2)]
+			world.spawn_altar(dungeon.random_cell_in(altar_room))
 		# 楼梯放在生成器算好的最远房间（stair_cell），不再依赖 rooms 的下标含义
 		world.set_stairs(dungeon.stair_cell if dungeon.stair_cell.x >= 0 \
 			else dungeon._center(dungeon.rooms[dungeon.rooms.size() - 1]))
@@ -603,6 +612,7 @@ func _process(delta: float) -> void:
 		if combo_t <= 0.0:
 			combo_t = 0.0
 			combo_n = 0
+		quote_cd = maxf(0.0, quote_cd - delta)
 
 	# 性能 HUD + 队伍面板（每 0.5s 刷新）
 	_perf_t -= delta
@@ -673,6 +683,10 @@ func _update_interact_prompt() -> void:
 			_interact_target = {"kind": "chest", "node": c}
 			text = "E 神秘商店" if c.merchant else "E 开箱"
 			break
+	if world.altar_node != null and is_instance_valid(world.altar_node) \
+			and world.altar_node.position.distance_to(cur.position) < 40.0:
+		_interact_target = {"kind": "altar"}
+		text = "E 献祭（-30%% 生命 → 全队攻击 +30%%）"
 	if stairs_dist() < 40.0:
 		_interact_target = {"kind": "stairs"}
 		text = "E 下到第 %d 层" % (floor_no + 1)
@@ -710,6 +724,19 @@ func _do_interact() -> void:
 			world.spawn_pxfx("portal", world.player.position, {"scale": 0.9, "speed": 1.4, "once": true})
 		"portal":
 			_settle(true, "凯旋而归！", "魔王已被讨伐，战利品铺满行囊。")
+		"altar":
+			# 血祭坛：以生命换力量（保底 1 点不死；光环进 damage_mob 全局乘区）
+			var cur2 = _camera_focus()
+			if cur2 != null:
+				var cost: int = maxi(1, int(cur2.max_hp * 0.3))
+				cur2.hp = maxi(1, cur2.hp - cost)
+				if cur2.hp_bar != null:
+					cur2.hp_bar.update_values(float(cur2.hp) / cur2.max_hp, float(cur2.sp) / maxf(cur2.max_sp, 1.0))
+				altar_atk_mult = 1.3
+				world.spawn_nova(cur2.position, Color(0.9, 0.2, 0.25))
+				play_sfx("heal", -4.0)
+				hud.log("祭坛饮下了你的血——全队攻击提升 30%（本层有效）")
+				world.clear_altar()
 
 
 # ———————— 宝箱 / 陷阱 ————————
@@ -931,6 +958,19 @@ func on_mob_dead(i: int) -> void:
 	if quests != null:
 		quests.on_kill(str(world.mobs.tpl_name[world.mobs.tpl[i]]), world.mobs.boss[i] == 1)
 	world.spawn_death_poof(world.mobs.pos[i], Color(0.9, 0.85, 0.8))
+	# 队友战斗台词：击杀后小概率由随机存活队友喊一句（冷却防刷屏，职业台词在 balance.battle_quotes）
+	quote_cd = maxf(0.0, quote_cd)
+	if quote_cd <= 0.0 and party != null and rng.randf() < float(ArpgBalance.data.get("quote_chance", 0.15)):
+		var alive_friends: Array = []
+		for f in party.friends:
+			if f != null and is_instance_valid(f) and not f.dead and str(f.char_id) in ArpgBalance.data.get("battle_quotes", {}):
+				alive_friends.append(f)
+		if not alive_friends.is_empty():
+			var speaker = alive_friends[rng.randi_range(0, alive_friends.size() - 1)]
+			var quotes: Array = ArpgBalance.data["battle_quotes"][str(speaker.char_id)]
+			world.spawn_popup(str(quotes[rng.randi_range(0, quotes.size() - 1)]),
+				speaker.position + Vector2(0, -40), Color(0.95, 0.97, 1.0, 0.95), 13)
+			quote_cd = 8.0
 	# 金币/宝石爆量：这只怪"值多少"仍由 gold_drop_min/max 决定（经济不变），
 	# 掉多少颗、怎么散、怎么吸由 drops 段配置
 	var gold_total := rng.randi_range(int(ArpgBalance.data.get("gold_drop_min", 2)),
