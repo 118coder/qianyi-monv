@@ -255,6 +255,8 @@ static func defaults() -> Dictionary:
 		"max_floor": 5, "bag_cap": 20, "trap_chance": 0.45, "aggro_range": 185.0,
 		"elite_chance": 0.12, "death_loss": 0.5,
 		"elite_tint": [1.3, 1.15, 0.5],
+		"debt": {"initial": 300},
+		"combo": {"window": 3.0},
 		"ai": {
 			"flow_recalc_interval": 0.25,
 			"separation": {"radius_pad": 10.0, "strength": 16.0, "max_neighbors": 6},

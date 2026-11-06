@@ -6,6 +6,8 @@ extends RefCounted
 ## · 与技能表（char_skills + 等级解锁）、商店、任务、存档系统互通
 
 var gold := 0
+var debt := 300                # 露塞提娅核心循环：开局欠款（三百枚金币）
+var debt_paid := 0             # 累计已还债务
 var inventory := ArpgInventory.new()
 var equipped := {"weapon": "", "armor": "", "trinket": ""}
 var quests := {}               # qid -> {"state": "active/done/claimed", "progress": int}
@@ -13,6 +15,10 @@ var quests := {}               # qid -> {"state": "active/done/claimed", "progre
 
 func setup() -> void:
 	inventory.setup(int(ArpgBalance.BAG_CAP))
+	# 初始债务读配置；已开始还债（debt_paid > 0）时保留进度，避免每局重置
+	var debt_cfg: Dictionary = ArpgBalance.data.get("debt", {})
+	if debt_paid <= 0:
+		debt = int(debt_cfg.get("initial", 300))
 	for qid in ArpgBalance.data.get("quests", {}):
 		if not quests.has(qid):
 			quests[qid] = {"state": "active", "progress": 0}
@@ -112,12 +118,14 @@ func quest_claim(qid: String) -> String:
 # ———————— 序列化（存档 v2） ————————
 
 func to_dict() -> Dictionary:
-	return {"gold": gold, "inventory": inventory.to_dict(),
+	return {"gold": gold, "debt": debt, "debt_paid": debt_paid, "inventory": inventory.to_dict(),
 		"equipped": equipped.duplicate(), "quests": quests.duplicate(true)}
 
 
 func from_dict(d: Dictionary) -> void:
 	gold = int(d.get("gold", 0))
+	debt = int(d.get("debt", 300))          # 旧档没有债务字段：按开局债务补齐
+	debt_paid = int(d.get("debt_paid", 0))
 	inventory.from_dict(d.get("inventory", {}))
 	var eq: Dictionary = d.get("equipped", {})
 	for slot in equipped:

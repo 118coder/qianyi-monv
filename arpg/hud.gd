@@ -22,11 +22,14 @@ var lv_label: Label
 var floor_label: Label
 var bag_label: Label
 var gold_label: Label
+var debt_label: Label
+var _debt_clear_shown := false
 var _gold_tw: Tween
 var minimap: Minimap
 var skill_label: Label
 var perf_label: Label
 var log_label: Label
+var log_bg: ColorRect
 var prompt_label: Label
 var boss_box: VBoxContainer
 var boss_bar: ProgressBar
@@ -39,6 +42,8 @@ var settle_title: Label
 var settle_stats: Label
 var settle_goods: Label
 var settle_total: Label
+var settle_combo: Label
+var settle_debt: Label
 var pause_root: Control
 
 # 队伍面板 / 调试面板
@@ -60,6 +65,7 @@ var shop_root: Control
 var shop_gold: Label
 var shop_list: VBoxContainer
 var shop_tab := "buy"
+var shop_in_dungeon := false   # 地牢商人打开的商店：期间暂停世界，关闭恢复
 var toast_label: Label
 
 var _logs := []
@@ -253,6 +259,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			_dlg_adv = true
 			return
+	if shop_root != null and shop_root.visible:
+		# 地牢商店开着时 ESC 只关商店（而不是叠一层暂停菜单）
+		if event.is_action_pressed("ui_cancel"):
+			close_shop()
+			get_viewport().set_input_as_handled()
+		return
 	if menu_root != null and menu_root.visible:
 		if event.is_action_pressed("char_menu") or event.is_action_pressed("ui_cancel"):
 			game._menu_close()
@@ -393,7 +405,7 @@ func _page_quests() -> void:
 		var prog: String = ("（%d/%d）" % [r["progress"], r["count"]]) if r["state"] == "active" else ""
 		var st_name: String = {"active": "进行中", "done": "已完成", "claimed": "已领取"}.get(r["state"], str(r["state"]))
 		menu_content.add_child(_menu_row("%s · %s %s" % [st_name, r["name"], prog], [], col))
-		menu_content.add_child(_label(12, C_TEXT_DIM, "    %s    奖励：%s" % [r["desc"], str(r["rewards"])]))
+		menu_content.add_child(_label(12, C_TEXT_DIM, "    %s    奖励：%s" % [r["desc"], _rewards_text(r["rewards"])]))
 		if r["state"] == "done":
 			menu_content.add_child(_menu_row("", [["领取奖励", func(): _menu_claim(str(r["id"]))]]))
 		menu_content.add_child(HSeparator.new())
@@ -471,6 +483,22 @@ func _menu_load_slot(slot: int) -> void:
 
 func _menu_claim(qid: String) -> void:
 	_menu_ctx["quests"].claim(qid)
+
+
+## 奖励字典 → 中文文本（「60G / 20 经验 / 药水×2」）；别把原始 JSON 泄给玩家
+func _rewards_text(rw: Dictionary) -> String:
+	var parts := []
+	for key in rw:
+		match str(key):
+			"gold":
+				parts.append("%dG" % int(rw[key]))
+			"xp":
+				parts.append("%d 经验" % int(rw[key]))
+			"item":
+				var itd: Dictionary = rw[key]
+				for iid in itd:
+					parts.append("%s×%d" % [ArpgBalance.ITEMS.get(str(iid), {}).get("name", str(iid)), int(itd[iid])])
+	return " / ".join(parts)
 	refresh_menu_ui()
 
 
@@ -531,7 +559,7 @@ func _build_shop_ui() -> void:
 	shop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shop_list.add_theme_constant_override("separation", 4)
 	scroll.add_child(shop_list)
-	var close := _btn("离开商店 (Esc)", func(): shop_root.visible = false)
+	var close := _btn("离开商店 (Esc)", func(): close_shop())
 	var ch := HBoxContainer.new()
 	ch.alignment = BoxContainer.ALIGNMENT_CENTER
 	ch.add_child(close)
@@ -539,12 +567,23 @@ func _build_shop_ui() -> void:
 	shop_root.visible = false
 
 
-func show_shop() -> void:
+func show_shop(from_dungeon: bool = false) -> void:
 	shop_root.visible = true
+	shop_in_dungeon = from_dungeon
+	if from_dungeon:
+		get_tree().paused = true   # 地牢里逛街时世界暂停，不然怪在你身后磨刀
 	refresh_shop()
 	var fb := _first_button(shop_list)
 	if fb != null:
 		fb.grab_focus()
+
+
+## 商店统一关闭出口：地牢模式要恢复世界（结算屏模式本来就 paused，不动）
+func close_shop() -> void:
+	shop_root.visible = false
+	if shop_in_dungeon:
+		shop_in_dungeon = false
+		get_tree().paused = false
 
 
 ## 队伍面板：可滚动，支持任意 N（需求书 §5.7）
@@ -694,6 +733,9 @@ func _build_play_hud() -> void:
 	gold_label = _label(15, Color(1, 0.86, 0.36))
 	gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top_right.add_child(gold_label)
+	debt_label = _label(14, Color(1, 0.66, 0.55))
+	debt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	top_right.add_child(debt_label)
 	bag_label = _label(14, Color(1, 1, 1))
 	bag_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top_right.add_child(bag_label)
@@ -710,7 +752,8 @@ func _build_play_hud() -> void:
 	minimap.bind_hud(self)
 
 	# 战斗日志底板：半透明黑衬底，日志不再直接压在地砖上（视觉走查反馈）
-	var log_bg := ColorRect.new()
+	# 无日志时整块隐藏，不留空黑框（第二轮走查反馈）
+	log_bg = ColorRect.new()
 	log_bg.color = Color(0.03, 0.035, 0.05, 0.62)
 	log_bg.anchor_top = 1.0
 	log_bg.anchor_bottom = 1.0
@@ -719,9 +762,11 @@ func _build_play_hud() -> void:
 	log_bg.offset_right = 526
 	log_bg.offset_bottom = -42
 	log_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	log_bg.visible = false
 	play_hud.add_child(log_bg)
 	play_hud.move_child(log_bg, 0)
 	log_label = _label(13, Color(1, 1, 1, 0.92))
+	log_label.visible = false
 	log_label.anchor_top = 1.0
 	log_label.anchor_bottom = 1.0
 	log_label.offset_left = 16
@@ -783,6 +828,14 @@ func update_bars(player: ArpgPlayer, bag_n: int, potion_n: int, floor_no: int, b
 	sp_bar.value = float(player.sp) / player.max_sp
 	xp_bar.value = float(player.xp) / ArpgBalance.xp_need(player.level)
 	lv_label.text = "Lv %d    攻 %d    HP %d/%d" % [player.level, player.atk, player.hp, player.max_hp]
+	if debt_label != null and game != null and game.rpg != null:
+		var d: int = game.rpg.debt
+		var cleared := d <= 0
+		debt_label.text = "债务已清零" if cleared else "债务 %dG" % d
+		if cleared != _debt_clear_shown:
+			_debt_clear_shown = cleared
+			debt_label.add_theme_color_override("font_color",
+				C_ACCENT if cleared else Color(1, 0.66, 0.55))
 	floor_label.text = "地下 %d 层%s" % [floor_no, "　★ BOSS" if boss_floor else ""]
 	bag_label.text = "背包 %d/%d    药水×%d [Q]" % [bag_n, ArpgBalance.BAG_CAP, potion_n]
 	var sks: Array = player.available_skills()
@@ -801,6 +854,9 @@ func log(msg: String) -> void:
 	while _logs.size() > 5:
 		_logs.pop_front()
 	log_label.text = "\n".join(_logs)
+	if not log_label.visible:
+		log_label.visible = true
+		log_bg.visible = true
 
 
 func set_prompt(text: String) -> void:
@@ -911,6 +967,7 @@ func show_dialogue(speaker_id: String, lines: Array) -> void:
 	# 对话期间收起战斗日志：两者同占左下，层级冲突会截断日志文本（视觉走查反馈）
 	var log_was := log_label.visible
 	log_label.visible = false
+	log_bg.visible = false
 	var was_paused := get_tree().paused
 	get_tree().paused = true
 	for line in lines:
@@ -921,6 +978,7 @@ func show_dialogue(speaker_id: String, lines: Array) -> void:
 	dlg_active = false
 	dlg_panel.visible = false
 	log_label.visible = log_was
+	log_bg.visible = log_was
 	get_tree().paused = was_paused
 
 
@@ -1063,6 +1121,12 @@ func _build_settle() -> void:
 	settle_total = _label(20, Color(1, 0.85, 0.35))
 	settle_total.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(settle_total)
+	settle_combo = _label(16, Color(1, 0.85, 0.3))
+	settle_combo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(settle_combo)
+	settle_debt = _label(18, Color(1, 0.72, 0.6))
+	settle_debt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(settle_debt)
 	var bh := HBoxContainer.new()
 	bh.alignment = BoxContainer.ALIGNMENT_CENTER
 	bh.add_theme_constant_override("separation", 12)
@@ -1078,12 +1142,24 @@ func _sell_loot_from_settle() -> void:
 		settle_total.text = "已售出 +%dG（金币 %dG）" % [g, game.rpg.gold]
 
 
-func show_settle(title: String, title_col: Color, stats: String, goods: String, total: int) -> void:
+func show_settle(title: String, title_col: Color, stats: String, goods: String, total: int,
+		best_combo: int = 0, paid: int = 0, debt_left: int = 0) -> void:
 	settle_title.text = title
 	settle_title.add_theme_color_override("font_color", title_col)
 	settle_stats.text = stats
 	settle_goods.text = goods
 	settle_total.text = "商品总价值：%d G" % total
+	if settle_combo != null:
+		settle_combo.text = "最高连杀 ×%d" % best_combo
+	if settle_debt != null:
+		if debt_left <= 0:
+			settle_debt.text = "债务清零！"
+			settle_debt.add_theme_font_size_override("font_size", 30)
+			settle_debt.add_theme_color_override("font_color", C_ACCENT)
+		else:
+			settle_debt.text = "偿还债务 %dG（剩余 %dG）" % [paid, debt_left]
+			settle_debt.add_theme_font_size_override("font_size", 18)
+			settle_debt.add_theme_color_override("font_color", Color(1, 0.72, 0.6))
 	settle_root.visible = true
 
 
