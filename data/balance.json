@@ -384,6 +384,15 @@
    "slot": "trinket",
    "sp": 20,
    "tier": 1
+  },
+  "devil_sigil": {
+   "name": "魔王徽记",
+   "slot": "trinket",
+   "atk": 5,
+   "hp": 20,
+   "sp": 15,
+   "price": 0,
+   "tier": 3
   }
  },
  "floor_enemy_count_base": 8,
@@ -854,5 +863,8 @@
  "milestone": {
   "every": 25,
   "gold": 40
+ },
+ "boss_drop": {
+  "item": "devil_sigil"
  }
 }
