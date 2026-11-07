@@ -46,7 +46,6 @@ func settle() -> Dictionary:
 				shop_income += price
 				shop_n += 1
 				shop_lines.append("%s +%dG" % [str(row["name"]), price])
-				main.hud.log("店铺售出 %s（+%dG）" % [str(row["name"]), price])
 		if shop_income > 0:
 			rpg.gold += shop_income
 	# ② 跨局成就统计（历史击杀/最深楼层/最高连杀，随存档走）
