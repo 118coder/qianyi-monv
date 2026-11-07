@@ -896,5 +896,11 @@
  "rent": {
   "daily": 20,
   "ten_days": 10
+ },
+ "forge": {
+  "cost_base": 30,
+  "cost_mult": 1.6,
+  "max_plus": 3,
+  "atk_per": 2
  }
 }

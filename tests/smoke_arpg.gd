@@ -11,7 +11,7 @@ func _initialize() -> void:
 
 
 func _watchdog() -> void:
-	await create_timer(40.0).timeout
+	await create_timer(120.0).timeout   # 断言累计增长后 40s 已不够（曾误砍正常流程）
 	print("WATCHDOG TIMEOUT")
 	quit(2)
 
@@ -290,6 +290,19 @@ func _run() -> void:
 	_check(main.shop.buy("potion") == "", "商店买入")
 	main.rpg.gold = 5
 	_check(main.shop.buy("sword_flame").contains("金币不足"), "金币不足校验")
+	# 铁砧强化：费用递增 → 攻击加成生效 → 上限拦截（与还债的抉择张力）
+	main.rpg.gold = 200
+	main.rpg.inventory.add("sword_iron")
+	main.rpg.equip("sword_iron")   # 强化加成只作用于已穿装备（前面卸下回退测试把它脱了）
+	var forge_atk0: int = main.player.eff_atk()   # 基线含装备本体，差值即纯强化加成
+	_check(main.rpg.forge_item("sword_iron") == "", "强化第一次成功")
+	_check(main.rpg.forge_cost("sword_iron") > int(ArpgBalance.data.get("forge", {}).get("cost_base", 30)),
+		"强化费用递增（%dG）" % main.rpg.forge_cost("sword_iron"))
+	_check(main.player.eff_atk() == forge_atk0 + int(ArpgBalance.data.get("forge", {}).get("atk_per", 2)),
+		"强化攻击加成生效（+%d）" % (main.player.eff_atk() - forge_atk0))
+	main.rpg.forge_level["sword_iron"] = 99
+	_check(main.rpg.forge_item("sword_iron").contains("上限"), "强化上限拦截")
+	main.rpg.forge_level["sword_iron"] = 3   # 恢复合法值（脏状态会污染后续测试）
 	main.rpg.gold = 500
 	main.rpg.inventory.add("orb")
 	_check(main.shop.sell_all_goods() >= 0, "一键卖出")

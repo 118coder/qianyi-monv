@@ -16,6 +16,7 @@ var quests := {}               # qid -> {"state": "active/done/claimed", "progre
 var lifetime_kills := 0        # 历史累计击杀
 var best_floor := 0            # 历史最深楼层
 var best_combo := 0            # 历史最高连杀
+var forge_level := {}          # item_id -> 强化等级（+N，商人铁砧；atk 加成见 equip_bonus）
 
 
 func setup() -> void:
@@ -39,7 +40,35 @@ func equip_bonus(key: String) -> int:
 		if iid == "" or not eq_table.has(iid):
 			continue
 		total += int(eq_table[iid].get(key, 0))
+		# 铁砧强化：atk 按 +N × atk_per 追加（forge 段配置，商人处强化）
+		if key == "atk" and int(forge_level.get(iid, 0)) > 0:
+			var fcfg: Dictionary = ArpgBalance.data.get("forge", {})
+			total += int(forge_level[iid]) * int(fcfg.get("atk_per", 2))
 	return total
+
+
+## 强化费用：cost_base × cost_mult^当前等级（取整）
+func forge_cost(item_id: String) -> int:
+	var fcfg: Dictionary = ArpgBalance.data.get("forge", {})
+	var cur: int = int(forge_level.get(item_id, 0))
+	return int(round(float(fcfg.get("cost_base", 30)) * pow(float(fcfg.get("cost_mult", 1.6)), cur)))
+
+
+## 铁砧强化：金币支付 → +1 级（上限 max_plus）。返回错误文案（空串=成功）
+func forge_item(item_id: String) -> String:
+	var eq: Dictionary = ArpgBalance.data.get("equipment", {}).get(item_id, {})
+	if eq.is_empty():
+		return "这不是装备"
+	var cur: int = int(forge_level.get(item_id, 0))
+	var fcfg: Dictionary = ArpgBalance.data.get("forge", {})
+	if cur >= int(fcfg.get("max_plus", 3)):
+		return "已强化至上限 +%d" % cur
+	var cost: int = forge_cost(item_id)
+	if gold < cost:
+		return "金币不足（需 %dG）" % cost
+	gold -= cost
+	forge_level[item_id] = cur + 1
+	return ""
 
 
 ## 穿装备（物品须在背包且是装备类）；同槽旧装备退回背包
@@ -125,7 +154,8 @@ func quest_claim(qid: String) -> String:
 func to_dict() -> Dictionary:
 	return {"gold": gold, "debt": debt, "debt_paid": debt_paid, "day": day, "inventory": inventory.to_dict(),
 		"equipped": equipped.duplicate(), "quests": quests.duplicate(true),
-		"lifetime_kills": lifetime_kills, "best_floor": best_floor, "best_combo": best_combo}
+		"lifetime_kills": lifetime_kills, "best_floor": best_floor, "best_combo": best_combo,
+		"forge_level": forge_level.duplicate()}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -136,6 +166,7 @@ func from_dict(d: Dictionary) -> void:
 	lifetime_kills = int(d.get("lifetime_kills", 0))
 	best_floor = int(d.get("best_floor", 0))
 	best_combo = int(d.get("best_combo", 0))
+	forge_level = (d.get("forge_level", {}) as Dictionary).duplicate()
 	inventory.from_dict(d.get("inventory", {}))
 	var eq: Dictionary = d.get("equipped", {})
 	for slot in equipped:
