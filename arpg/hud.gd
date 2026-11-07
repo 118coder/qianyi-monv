@@ -56,12 +56,7 @@ var menu_content: VBoxContainer
 var menu_header: Label
 var _menu_tab := "状态"
 var _menu_ctx := {}
-var shop_root: Control
-var shop_gold: Label
-var shop_list: VBoxContainer
-var shop_tab := "buy"
-var shop_tab_nodes: Array = []   # 买入/卖出页签按钮（选中态高亮用）
-var shop_in_dungeon := false   # 地牢商人打开的商店：期间暂停世界，关闭恢复
+var shop_screen: ArpgHudShop   # 商店屏（hud_shop.gd，P1-2 按屏拆分）
 var toast_label: Label
 var toast_bg: ColorRect
 
@@ -173,7 +168,8 @@ func _ready() -> void:
 	_build_party_panel()
 	_build_debug_panel()
 	_build_menu_ui()
-	_build_shop_ui()
+	shop_screen = ArpgHudShop.new(self)
+	shop_screen.build()
 	_build_toast()
 	_build_banner()
 	_build_dialogue()
@@ -309,7 +305,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			_dlg_adv = true
 			return
-	if shop_root != null and shop_root.visible:
+	if shop_screen != null and shop_screen.shop_root != null and shop_screen.shop_root.visible:
 		# 地牢商店开着时 ESC 只关商店（而不是叠一层暂停菜单）
 		if event.is_action_pressed("ui_cancel"):
 			close_shop()
@@ -349,86 +345,12 @@ func refresh_menu_ui() -> void:
 			_page_sys()
 
 
-func refresh_shop() -> void:
-	var rpg = _menu_ctx["rpg"] if not _menu_ctx.is_empty() else game.rpg
-	shop_gold.text = "金币 %dG" % rpg.gold
-	for c in shop_list.get_children():
-		c.queue_free()
-	if shop_tab == "buy":
-		for iid in game.shop.stock():
-			var price: int = game.shop.price_of(iid)
-			var can: bool = rpg.gold >= price
-			var row := _menu_row("%s —— %dG%s" % [game.shop.name_of(iid), price, "" if can else "（金币不足）"],
-				[["购买", func():
-					var err: String = game.shop.buy(iid)
-					if err != "":
-						game.hud.log(err)
-					refresh_shop()]], C_TEXT if can else C_TEXT_DIM, not can)
-			shop_list.add_child(row)
-	elif shop_tab == "forge":
-		# 铁砧：已拥有（背包+已穿）的装备强化——金币的第二出口，与还债的抉择张力
-		var seen := {}
-		var eq_table: Dictionary = ArpgBalance.data.get("equipment", {})
-		for slot in rpg.equipped:
-			var eid: String = str(rpg.equipped[slot])
-			if eid != "" and eq_table.has(eid) and not seen.has(eid):
-				seen[eid] = true
-				shop_list.add_child(_forge_row(rpg, eid))
-		for r2 in rpg.inventory.rows():
-			if str(r2.get("kind", "")) == "equip" and eq_table.has(str(r2["id"])) and not seen.has(str(r2["id"])):
-				seen[str(r2["id"])] = true
-				shop_list.add_child(_forge_row(rpg, str(r2["id"])))
-		if seen.is_empty():
-			shop_list.add_child(_label(13, C_TEXT_DIM, "（还没有装备——先去商店买一件或从地牢打捞）"))
-	else:
-		var rows: Array = rpg.inventory.rows()
-		if rows.is_empty():
-			shop_list.add_child(_label(13, C_TEXT_DIM, "（背包空空如也 · 去地牢捡点战利品）"))
-		for i in rows.size():
-			var r: Dictionary = rows[i]
-			var gain: int = maxi(1, int(round(int(r["value"]) * float(ArpgBalance.data.get("sell_ratio", 0.6))))) * int(r["count"])
-			shop_list.add_child(_menu_row("%s ×%d —— +%dG" % [r["name"], r["count"], gain],
-				[["卖出", func():
-					game.shop.sell_slot(i)
-					refresh_shop()]]))
-	shop_list.add_child(_label(11, C_TEXT_DIM, " "))
-	shop_list.add_child(_label(11, C_TEXT_DIM, "打捞提示：战利品在结算时自动折价还债，背包不留也行。"))
-	_refresh_shop_tabs()
-
-
 ## 铁砧行：装备名 +N / 下级费用 / 强化按钮（金币不足置灰）
-func _forge_row(rpg, item_id: String) -> Control:
-	var eq: Dictionary = ArpgBalance.data.get("equipment", {}).get(item_id, {})
-	var cur: int = int(rpg.forge_level.get(item_id, 0))
-	var at_max: bool = cur >= int(ArpgBalance.data.get("forge", {}).get("max_plus", 3))
-	var cost: int = rpg.forge_cost(item_id)
-	var can: bool = not at_max and rpg.gold >= cost
-	var plus_txt := " +%d" % cur if cur > 0 else ""
-	var next_txt := " —— %dG" % cost if not at_max else "（已至上限）"
-	var row := _menu_row("%s%s —— 攻+%d%s" % [eq.get("name", item_id), plus_txt,
-		int(eq.get("atk", 0)) + cur * int(ArpgBalance.data.get("forge", {}).get("atk_per", 2)), next_txt],
-		[["强化", func():
-			var err: String = rpg.forge_item(item_id)
-			if err != "":
-				game.hud.log(err)
-			else:
-				game.hud.log("%s 强化成功，当前 +%d" % [eq.get("name", item_id), int(rpg.forge_level.get(item_id, 0))])
-				main_play_sfx()
-			refresh_shop()]], C_TEXT if can else C_TEXT_DIM, not can)
-	return row
-
-
 func main_play_sfx() -> void:
 	game.play_sfx("cursor")
 
 
 ## 买入/卖出页签选中态：当前页高亮（视觉走查反馈：两页签看不出差别）
-func _refresh_shop_tabs() -> void:
-	for t in shop_tab_nodes:
-		var is_cur: bool = str(t.get_meta("tab", "")) == shop_tab
-		t.modulate = Color(1, 1, 1, 1.0) if is_cur else Color(1, 1, 1, 0.45)
-
-
 func _menu_row(text: String, btn_defs: Array = [], row_color: Color = Color.WHITE, btn_disabled: bool = false) -> Control:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 8)
@@ -623,56 +545,13 @@ func hide_menu_ui() -> void:
 	menu_root.visible = false
 
 
-func _build_shop_ui() -> void:
-	shop_root = Control.new()
-	shop_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shop_root.visible = false
-	root.add_child(shop_root)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.6)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shop_root.add_child(dim)
-	var panel := _panel_box()
-	panel.anchor_left = 0.5
-	panel.anchor_right = 0.5
-	panel.anchor_top = 0.5
-	panel.anchor_bottom = 0.5
-	panel.offset_left = -330
-	panel.offset_right = 330
-	panel.offset_top = -250
-	panel.offset_bottom = 250
-	shop_root.add_child(panel)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 8)
-	panel.add_child(v)
-	shop_gold = _label(20, C_ACCENT)
-	v.add_child(shop_gold)
-	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 6)
-	v.add_child(tabs)
-	shop_tab_nodes = []
-	for pair in [["买入", "buy"], ["卖出", "sell"], ["强化", "forge"]]:
-		var b := _tab_btn(pair[0], pair[1] == "buy")
-		b.set_meta("tab", pair[1])
-		b.pressed.connect(func():
-			shop_tab = pair[1]
-			refresh_shop())
-		tabs.add_child(b)
-		shop_tab_nodes.append(b)
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_theme_stylebox_override("panel", _style_box(Color(0, 0, 0, 0.25), 8, true))
-	v.add_child(scroll)
-	shop_list = VBoxContainer.new()
-	shop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	shop_list.add_theme_constant_override("separation", 4)
-	scroll.add_child(shop_list)
-	var close := _btn("离开商店 (Esc)", func(): close_shop())
-	var ch := HBoxContainer.new()
-	ch.alignment = BoxContainer.ALIGNMENT_CENTER
-	ch.add_child(close)
-	v.add_child(ch)
-	shop_root.visible = false
+## 商店屏（hud_shop.gd 屏组件）：外部调用点保持不变
+func show_shop(from_dungeon: bool = false) -> void:
+	shop_screen.show(from_dungeon)
+
+
+func close_shop() -> void:
+	shop_screen.close()
 
 
 ## 结算屏（hud_settle.gd 屏组件）：main 的调用点保持不变
@@ -681,25 +560,7 @@ func show_settle(title: String, title_col: Color, stats: String, goods: String, 
 	settle_screen.show(title, title_col, stats, goods, total, best_combo, paid, debt_left)
 
 
-func show_shop(from_dungeon: bool = false) -> void:
-	shop_root.visible = true
-	shop_in_dungeon = from_dungeon
-	if from_dungeon:
-		get_tree().paused = true   # 地牢里逛街时世界暂停，不然怪在你身后磨刀
-	refresh_shop()
-	var fb := _first_button(shop_list)
-	if fb != null:
-		fb.grab_focus()
-
-
 ## 商店统一关闭出口：地牢模式要恢复世界（结算屏模式本来就 paused，不动）
-func close_shop() -> void:
-	shop_root.visible = false
-	if shop_in_dungeon:
-		shop_in_dungeon = false
-		get_tree().paused = false
-
-
 ## 队伍面板：可滚动，支持任意 N（需求书 §5.7）
 func _build_party_panel() -> void:
 	var party_panel := _panel_box()
