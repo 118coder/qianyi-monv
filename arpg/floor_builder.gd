@@ -150,7 +150,7 @@ static func _populate(main: Node) -> void:
 		# 宝箱房贴片（方案 B 扩展）：贴片池按层数选择（patch 的 min_floor 匹配最深者）
 		var patch_path := "res://data/scenes/patch_treasure.json"
 		var best_floor_req := -1
-		for pname in ["patch_treasure", "patch_story", "patch_ambush", "patch_swamp"]:
+		for pname in ["patch_treasure", "patch_story", "patch_ambush", "patch_swamp", "patch_vestibule"]:
 			var pp: String = "res://data/scenes/%s.json" % pname
 			var pd: Dictionary = ArpgSceneLoader.load_patch(pp)
 			if not pd.is_empty():
