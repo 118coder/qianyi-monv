@@ -27,6 +27,7 @@ func settle() -> Dictionary:
 	var sd: Dictionary = ArpgBalance.data.get("shop_day", {})
 	var shop_income := 0
 	var shop_n := 0
+	var shop_lines := []
 	if float(sd.get("chance", 0)) > 0.0 and rng.randf() < float(sd["chance"]):
 		var goods: Array = []
 		for row in rpg.inventory.rows():
@@ -44,6 +45,7 @@ func settle() -> Dictionary:
 			if rpg.inventory.remove(str(row["id"]), 1):
 				shop_income += price
 				shop_n += 1
+				shop_lines.append("%s +%dG" % [str(row["name"]), price])
 				main.hud.log("店铺售出 %s（+%dG）" % [str(row["name"]), price])
 		if shop_income > 0:
 			rpg.gold += shop_income
@@ -84,7 +86,7 @@ func settle() -> Dictionary:
 		var due: int = int(rent_cfg.get("ten_days", 10))
 		if rpg.day > due and rpg.debt > 0:
 			overdue = rpg.day - due
-	return {"paid": paid, "overdue": overdue, "rent_paid": rent_paid}
+	return {"paid": paid, "overdue": overdue, "rent_paid": rent_paid, "shop_lines": shop_lines}
 
 
 ## 还债/租金结算后的 flavor 叙事行（供结算屏拼接）
