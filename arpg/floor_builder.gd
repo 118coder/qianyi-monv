@@ -147,6 +147,23 @@ static func _populate(main: Node) -> void:
 				continue
 			var tpl_id: String = ArpgBalance.weighted_pick(pool, dungeon.rng)
 			world.spawn_mob(tpl_id, cell, rng.randf() < ArpgBalance.ELITE_CHANCE, false)
+		# 宝箱房贴片（方案 B 扩展）：手搭障碍地形转印进宝箱房（居中，不贴边保连通）
+		var patch: Dictionary = ArpgSceneLoader.load_patch("res://data/scenes/patch_treasure.json")
+		var loot: Rect2i = dungeon.loot_room(rng)
+		if not patch.is_empty() and int(patch["w"]) <= loot.size.x - 2 and int(patch["h"]) <= loot.size.y - 2:
+			var ox: int = loot.position.x + (loot.size.x - int(patch["w"])) / 2
+			var oy: int = loot.position.y + (loot.size.y - int(patch["h"])) / 2
+			for py in int(patch["h"]):
+				for px in int(patch["w"]):
+					var v: int = int(patch["cells"][py * int(patch["w"]) + px])
+					var gx: int = ox + px
+					var gy: int = oy + py
+					if gx <= loot.position.x or gx >= loot.end.x - 1 or gy <= loot.position.y or gy >= loot.end.y - 1:
+						continue   # 贴片不印房间边缘（保走廊连通）
+					if v == 2 and dungeon.is_floor(Vector2i(gx, gy)):
+						dungeon.grid[gx][gy] = ArpgDungeon.WALL
+					elif v == 1:
+						dungeon.grid[gx][gy] = ArpgDungeon.FLOOR
 		# 宝箱 ×2：优先放叶节点房间（只连一条走廊的尽头），跑一趟有回报
 		for i in 2:
 			world.spawn_chest(dungeon.random_cell_in(dungeon.loot_room(rng)))
