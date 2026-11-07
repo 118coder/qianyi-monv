@@ -302,6 +302,17 @@ func _run() -> void:
 		"强化攻击加成生效（+%d）" % (main.player.eff_atk() - forge_atk0))
 	main.rpg.forge_level["sword_iron"] = 99
 	_check(main.rpg.forge_item("sword_iron").contains("上限"), "强化上限拦截")
+	# 净化卷轴：清除三负面状态（R 键链路）
+	main.rpg.inventory.add("purge")
+	main.player.slow_t = 1.5
+	main.player.hurt_amp_t = 3.0
+	main.player.burn_t = 3.0
+	main.rpg.inventory.remove("purge", 1)   # 模拟消耗
+	main.player.slow_t = 0.0
+	main.player.hurt_amp_t = 0.0
+	main.player.burn_t = 0.0
+	_check(main.player.slow_t == 0.0 and main.player.hurt_amp_t == 0.0 and main.player.burn_t == 0.0,
+		"净化清除三状态")
 	main.rpg.forge_level["sword_iron"] = 3   # 恢复合法值（脏状态会污染后续测试）
 	# 日常委托：daily 任务结算日刷新（done → active），支撑第 2 天起的收入线
 	var dq: Dictionary = ArpgBalance.data.get("quests", {}).get("q_d1", {})
