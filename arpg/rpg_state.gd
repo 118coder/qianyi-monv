@@ -8,6 +8,7 @@ extends RefCounted
 var gold := 0
 var debt := 300                # 露塞提娅核心循环：开局欠款（三百枚金币）
 var debt_paid := 0             # 累计已还债务
+var day := 1                   # 经营天数（每次结算 +1；债主期限 ten_days 前还清是玩家的压力线）
 var inventory := ArpgInventory.new()
 var equipped := {"weapon": "", "armor": "", "trinket": ""}
 var quests := {}               # qid -> {"state": "active/done/claimed", "progress": int}
@@ -122,7 +123,7 @@ func quest_claim(qid: String) -> String:
 # ———————— 序列化（存档 v2） ————————
 
 func to_dict() -> Dictionary:
-	return {"gold": gold, "debt": debt, "debt_paid": debt_paid, "inventory": inventory.to_dict(),
+	return {"gold": gold, "debt": debt, "debt_paid": debt_paid, "day": day, "inventory": inventory.to_dict(),
 		"equipped": equipped.duplicate(), "quests": quests.duplicate(true),
 		"lifetime_kills": lifetime_kills, "best_floor": best_floor, "best_combo": best_combo}
 
@@ -131,6 +132,7 @@ func from_dict(d: Dictionary) -> void:
 	gold = int(d.get("gold", 0))
 	debt = int(d.get("debt", 300))          # 旧档没有债务字段：按开局债务补齐
 	debt_paid = int(d.get("debt_paid", 0))
+	day = int(d.get("day", 1))
 	lifetime_kills = int(d.get("lifetime_kills", 0))
 	best_floor = int(d.get("best_floor", 0))
 	best_combo = int(d.get("best_combo", 0))

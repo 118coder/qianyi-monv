@@ -1134,6 +1134,25 @@ func _settle(win: bool, title: String, flavor: String) -> void:
 	rpg.lifetime_kills += kills
 	rpg.best_floor = maxi(rpg.best_floor, floor_no)
 	rpg.best_combo = maxi(rpg.best_combo, combo_best)
+	# 经营主循环 MVP：一天过去 → 收租金（不足部分滚进债务——露塞提娅式的雪球压力）
+	var rent_cfg: Dictionary = ArpgBalance.data.get("rent", {})
+	var rent: int = int(rent_cfg.get("daily", 0))
+	if rent > 0:
+		rpg.day += 1
+		if rpg.gold >= rent:
+			rpg.gold -= rent
+			rpg.debt_paid += rent
+			rpg.debt -= rent
+			hud.log("第 %d 天：支付店租 %dG" % [rpg.day - 1, rent])
+		else:
+			var lack: int = rent - rpg.gold
+			rpg.debt += lack
+			rpg.gold = 0
+			hud.log("第 %d 天：店租 %dG 付不起，欠款又多了 %dG……" % [rpg.day - 1, rent, lack])
+		# 债主期限的叙事压力（不做硬失败，Demo 留悬念）
+		var due: int = int(rent_cfg.get("ten_days", 10))
+		if rpg.day > due and rpg.debt > 0:
+			flavor = "%s\n第 %d 天了……债主的耐心正在耗尽。" % [flavor, rpg.day]
 	# 还债结局反馈：清零时结算标题变金色（露塞提娅循环的正反馈时刻）
 	var title_col := Color(1, 0.95, 0.75) if win else Color(1, 0.55, 0.5)
 	if rpg.debt <= 0:
@@ -1142,8 +1161,8 @@ func _settle(win: bool, title: String, flavor: String) -> void:
 		flavor = "%s\n三百枚金币，一枚不少。债主的脸色从未这么好看过。" % flavor
 	elif paid > 0:
 		flavor = "%s\n这一趟还了 %dG——离自由又近了一天。" % [flavor, paid]
-	var stats := "%s\n到达：地下 %d 层    击败：%d 只    等级：Lv %d" % [
-		flavor, floor_no, kills, player.level]
+	var stats := "%s\n到达：地下 %d 层    击败：%d 只    等级：Lv %d    第 %d 天" % [
+		flavor, floor_no, kills, player.level, rpg.day]
 	hud.show_settle(title, title_col, stats, goods_text, total,
 		combo_best, paid, rpg.debt)
 	hud.log("结算：偿还债务 %dG（剩余 %dG）" % [paid, rpg.debt])

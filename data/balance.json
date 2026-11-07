@@ -866,5 +866,9 @@
  },
  "boss_drop": {
   "item": "devil_sigil"
+ },
+ "rent": {
+  "daily": 20,
+  "ten_days": 10
  }
 }

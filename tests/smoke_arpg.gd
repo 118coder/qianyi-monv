@@ -38,6 +38,7 @@ func _run() -> void:
 	main.start_run("witch")
 	await process_frame
 	_check(main.state == main.State.PLAY, "进入 PLAY")
+	_check(main.rpg.debt == 300 and main.rpg.day == 1, "开局债务 300 · 第 1 天（经营循环初始）")
 	_check(main.world.mob_count() >= 5, "第 1 层敌人数 %d" % main.world.mob_count())
 	_check(main.world.chests.size() >= 2 and main.world.chests.size() <= 3,
 		"宝箱 ×2（神秘商人 25%% 概率 +1 → %d）" % main.world.chests.size())
@@ -235,7 +236,8 @@ func _run() -> void:
 	_check(main.rpg.gold > gold0, "任务奖励金币入账")
 	_check(claimed.contains("经验"), "任务 xp 奖励入账路径（领奖文本含经验）")
 	# 债务 / 连杀系统（露塞提娅核心循环 + 播报）
-	_check(main.rpg.debt == 300, "初始债务 300")
+	# debt 在第 5 节结算时已被租金/还债动过，这里只验证「不崩且为正」；初始值断言在第 2 节开局后
+	_check(main.rpg.debt > 0, "债务状态有效（%dG，第 %d 天）" % [main.rpg.debt, main.rpg.day])
 	_check(float(ArpgBalance.data.get("combo", {}).get("window", 0)) > 0, "连杀窗口已载入")
 	# 伤害管线 v2：combat 段热载 + 暴击路径不崩（popup/火花走特效池，headless 可跑）
 	_check(float(ArpgBalance.data.get("combat", {}).get("crit_mult", 0)) > 1.0, "combat 段已载入")
@@ -295,13 +297,15 @@ func _run() -> void:
 	var g_snap: int = main.rpg.gold
 	main.rpg.lifetime_kills = 77
 	main.rpg.best_floor = 4
+	main.rpg.day = 6
 	_check(main.save_sys.save_game(), "存档 v2 写入")
 	main.rpg.gold = 1
 	main.rpg.lifetime_kills = 0
 	var err: String = main.save_sys.load_game()
 	_check(err == "", "读档无错误")
 	_check(main.rpg.gold == g_snap, "金币往返一致")
-	_check(main.rpg.lifetime_kills == 77 and main.rpg.best_floor == 4, "跨局成就统计随存档往返")
+	_check(main.rpg.lifetime_kills == 77 and main.rpg.best_floor == 4 and main.rpg.day == 6,
+		"跨局统计与天数随存档往返")
 
 	# P1-1 方案 C：手搭场景 → ArpgDungeon 转换层（布局/起点/楼梯/可走）
 	var sd: ArpgDungeon = ArpgSceneLoader.load_dungeon("res://data/scenes/scene001.json")
