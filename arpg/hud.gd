@@ -51,6 +51,7 @@ var _debug_visible := false
 # 角色菜单 / 商店 / 任务提示
 var game: Node
 var menu_screen: ArpgHudMenu   # 角色菜单屏（hud_menu.gd，P1-2 按屏拆分）
+var _menu_ctx := {}            # 屏间共享上下文快照（结算屏商店/菜单页共同读取）
 var menu_tabs := {}
 var shop_screen: ArpgHudShop   # 商店屏（hud_shop.gd，P1-2 按屏拆分）
 var toast_label: Label
@@ -382,6 +383,20 @@ func set_debug_lines(lines: Array) -> void:
 
 
 # ———————— 小工具 ————————
+
+func _menu_row(text: String, btn_defs: Array = [], row_color: Color = Color.WHITE, btn_disabled: bool = false) -> Control:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	var l: Label = _label(14, row_color, text)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(l)
+	for bd in btn_defs:
+		var b: Button = _btn(str(bd[0]), bd[1])
+		b.disabled = btn_disabled
+		h.add_child(b)
+	return h
+
+
 
 func _label(size: int, col: Color, text := "") -> Label:
 	var l := Label.new()
