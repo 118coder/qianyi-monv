@@ -120,6 +120,15 @@ func refresh() -> void:
 			shop_list.add_child(hud._label(13, hud.C_TEXT_DIM, "（还没有装备——先去商店买一件或从地牢打捞）"))
 	else:
 		var rows: Array = rpg.inventory.rows()
+		# 今日顾客偏好提示：按成交率乘数排序（经营策略的信息层——上架什么有讲究）
+		var prefs: Dictionary = ArpgBalance.data.get("shop_day", {}).get("preferences", {})
+		if not prefs.is_empty():
+			var sorted_prefs: Array = prefs.keys()
+			sorted_prefs.sort_custom(func(a, b): return float(prefs[a]) > float(prefs[b]))
+			var hot: String = str(hud.game.shop.name_of(str(sorted_prefs[0]))) if sorted_prefs.size() > 0 else ""
+			var cold: String = str(hud.game.shop.name_of(str(sorted_prefs[sorted_prefs.size() - 1]))) if sorted_prefs.size() > 1 else ""
+			shop_list.add_child(hud._label(12, Color(0.95, 0.85, 0.5),
+				"今日行情：%s 最好卖 · %s 无人问津（上架有讲究）" % [hot, cold]))
 		if rows.is_empty():
 			shop_list.add_child(hud._label(13, hud.C_TEXT_DIM, "（背包空空如也 · 去地牢捡点战利品）"))
 		for i in rows.size():
