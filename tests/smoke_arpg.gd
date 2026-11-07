@@ -99,7 +99,7 @@ func _run() -> void:
 	_check(main.world.portal_cell.x >= 0, "Boss 死后出现传送门")
 	main._settle(true, "测试凯旋", "flavor")
 	_check(main.state == main.State.SETTLE, "结算画面状态")
-	_check(main.hud.settle_root.visible, "结算画面显示")
+	_check(main.hud.settle_screen.settle_root.visible, "结算画面显示")
 
 	print("== 6. 压测管线 ==")
 	main._stress_n = 300
