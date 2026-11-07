@@ -377,6 +377,23 @@ func spawn_hit_spark(pos: Vector2, col: Color) -> void:
 
 
 ## 死亡消散：燃尽序列帧加速播放（原序列 3.6 秒太长，压到 1.2 秒左右）
+## 死亡残留：暗色焦痕淡出 2.4s（战场记忆感——走过的地方能看到打过仗）
+func spawn_death_mark(pos: Vector2) -> void:
+	_fx_guard()
+	var m := Sprite2D.new()
+	m.texture = preload("res://assets/fx/Particle100.png") if ResourceLoader.exists("res://assets/fx/Particle100.png") else null
+	m.position = pos
+	m.modulate = Color(0.12, 0.1, 0.14, 0.5)
+	m.scale = Vector2(0.9, 0.9)
+	m.z_index = 3
+	fx_root.add_child(m)
+	var tw := m.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(m, "modulate:a", 0.0, 2.4)
+	tw.tween_property(m, "scale", Vector2(1.25, 1.25), 2.4)
+	tw.chain().tween_callback(m.queue_free)
+
+
 func spawn_death_poof(pos: Vector2, col: Color) -> void:
 	spawn_pxfx("dissolve", pos, {"scale": 0.62, "tint": col, "speed": 3.0})
 	burst(pos, ArpgTex.tex(FX_PARTICLE_PATH), Color(col.r, col.g, col.b, 0.85), 10, 150.0, 0.42, 0.10)

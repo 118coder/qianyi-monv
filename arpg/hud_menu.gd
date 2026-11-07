@@ -91,19 +91,6 @@ func main_play_sfx() -> void:
 
 
 ## 买入/卖出页签选中态：当前页高亮（视觉走查反馈：两页签看不出差别）
-func _menu_row(text: String, btn_defs: Array = [], row_color: Color = Color.WHITE, btn_disabled: bool = false) -> Control:
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 8)
-	var l: Label = hud._label(14, row_color, text)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(l)
-	for bd in btn_defs:
-		var b: Button = hud._btn(str(bd[0]), bd[1])
-		b.disabled = btn_disabled
-		h.add_child(b)
-	return h
-
-
 func _page_status() -> void:
 	var rpg = _menu_ctx["rpg"]
 	var player = _menu_ctx["player"]

@@ -757,6 +757,7 @@ func on_mob_dead(i: int) -> void:
 	# 注意 tpl_name 是模板表，实例索引要经 tpl[i] 二级寻址（PackedStringArray 越界就是直接用了 i）
 	if quests != null:
 		quests.on_kill(str(world.mobs.tpl_name[world.mobs.tpl[i]]), world.mobs.boss[i] == 1)
+	world.spawn_death_mark(world.mobs.pos[i])   # 焦痕残留：战场记忆感
 	world.spawn_death_poof(world.mobs.pos[i], Color(0.9, 0.85, 0.8))
 	# 队友战斗台词：击杀后小概率由随机存活队友喊一句（冷却防刷屏，职业台词在 balance.battle_quotes）
 	quote_cd = maxf(0.0, quote_cd)
