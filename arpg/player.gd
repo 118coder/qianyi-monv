@@ -62,6 +62,7 @@ var skill_cd := 0.0
 var stun := 0.0
 var iframes := 0.0
 var slow_t := 0.0                # 冰霜词缀减速剩余秒（命中时由 mob_system 设置）
+var hurt_amp_t := 0.0            # 易伤词缀增伤剩余秒（受伤 ×1.3）
 var dash_t := 0.0
 var dash_dir := Vector2.DOWN
 var dash_hit := {}
@@ -147,6 +148,7 @@ func _physics_process(delta: float) -> void:
 	skill_cd = maxf(0.0, skill_cd - delta)
 	stun = maxf(0.0, stun - delta)
 	slow_t = maxf(0.0, slow_t - delta)
+	hurt_amp_t = maxf(0.0, hurt_amp_t - delta)
 	iframes = maxf(0.0, iframes - delta)
 	if in_combat_until > 0.0:
 		in_combat_until -= delta
@@ -444,6 +446,9 @@ func _dash_hits() -> void:
 func take_damage(dmg: int, from_pos: Vector2) -> void:
 	if dead or iframes > 0.0 or main.state != main.State.PLAY:
 		return
+	# 易伤状态：受伤 ×1.3（brittle 词缀命中后 3s）
+	if hurt_amp_t > 0.0:
+		dmg = roundi(dmg * float(ArpgBalance.data.get("affixes", {}).get("brittle", {}).get("amp_mult", 1.3)))
 	hp = maxi(0, hp - maxi(1, dmg - eff_def()))
 	iframes = 0.55
 	in_combat_until = 4.0
