@@ -344,7 +344,14 @@
     0
    ],
    "windup": 0.3,
-   "xp": 8
+   "xp": 8,
+   "pounce": true,
+   "pounce_range": [
+    90,
+    280
+   ],
+   "pounce_speed": 620,
+   "pounce_cd": 3.5
   }
  },
  "equip_slots": [
