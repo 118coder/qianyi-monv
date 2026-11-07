@@ -176,7 +176,7 @@
  },
  "death_loss": 0.5,
  "debt": {
-  "initial": 300
+  "initial": 1200
  },
  "drop_base": [
   [
@@ -680,7 +680,7 @@
    "target": "floor",
    "count": 1,
    "rewards": {
-    "gold": 50
+    "gold": 30
    }
   },
   "q_hunt": {
@@ -691,7 +691,7 @@
    "count": 8,
    "requires": "q_intro",
    "rewards": {
-    "gold": 60,
+    "gold": 30,
     "xp": 20,
     "item": {
      "potion": 2
@@ -706,7 +706,7 @@
    "count": 5,
    "requires": "q_hunt",
    "rewards": {
-    "gold": 80,
+    "gold": 50,
     "item": {
      "sword_iron": 1
     }
@@ -720,7 +720,7 @@
    "count": 4,
    "requires": "q_ore",
    "rewards": {
-    "gold": 100,
+    "gold": 50,
     "xp": 40
    }
   },
@@ -732,8 +732,8 @@
    "count": 1,
    "requires": "q_depth",
    "rewards": {
-    "gold": 300,
-    "xp": 60
+    "gold": 60,
+    "xp": 120
    }
   },
   "q_d1": {
@@ -921,7 +921,7 @@
   "item": "devil_sigil"
  },
  "rent": {
-  "daily": 20,
+  "daily": 30,
   "ten_days": 10
  },
  "forge": {

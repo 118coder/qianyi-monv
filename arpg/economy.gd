@@ -64,7 +64,7 @@ func flavor_after(r: Dictionary) -> String:
 	if int(r["overdue"]) > 0:
 		out = "\n第 %d 天了……债主的耐心正在耗尽。" % rpg.day
 	elif rpg.debt <= 0:
-		out = "\n三百枚金币，一枚不少。债主的脸色从未这么好看过。"
+		out = "\n一千二百枚金币，一枚不少。债主的脸色从未这么好看过。"
 	elif int(r["paid"]) > 0:
 		out = "\n这一趟还了 %dG——离自由又近了一天。" % int(r["paid"])
 	return out

@@ -38,7 +38,7 @@ func _run() -> void:
 	main.start_run("witch")
 	await process_frame
 	_check(main.state == main.State.PLAY, "进入 PLAY")
-	_check(main.rpg.debt == 300 and main.rpg.day == 1, "开局债务 300 · 第 1 天（经营循环初始）")
+	_check(main.rpg.debt == 1200 and main.rpg.day == 1, "开局债务 300 · 第 1 天（经营循环初始）")
 	_check(main.world.mob_count() >= 5, "第 1 层敌人数 %d" % main.world.mob_count())
 	_check(main.world.chests.size() >= 2 and main.world.chests.size() <= 3,
 		"宝箱 ×2（神秘商人 25%% 概率 +1 → %d）" % main.world.chests.size())
