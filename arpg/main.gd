@@ -453,6 +453,16 @@ func _process(delta: float) -> void:
 
 	if Input.is_action_just_pressed("potion"):
 		drink_potion()
+	# 净化卷轴：清除冰霜/易伤/燃烧（R 键；消耗卷轴，蓝光反馈）
+	if Input.is_action_just_pressed("purge") and player != null and is_instance_valid(player):
+		var has_state: bool = player.slow_t > 0.0 or player.hurt_amp_t > 0.0 or player.burn_t > 0.0
+		if has_state and rpg.inventory.remove("purge", 1):
+			player.slow_t = 0.0
+			player.hurt_amp_t = 0.0
+			player.burn_t = 0.0
+			world.spawn_pxfx("heal", player.position, {"scale": 0.7, "tint": Color(0.5, 0.8, 1.0)})
+			play_sfx("magic", -6.0)
+			hud.log("净化卷轴生效——负面状态一扫而空")
 	if Input.is_action_just_pressed("interact"):
 		_do_interact()
 	_update_interact_prompt()

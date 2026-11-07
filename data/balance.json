@@ -564,6 +564,16 @@
     0.48
    ],
    "value": 25
+  },
+  "cleanse_potion": {
+   "name": "净化药水",
+   "kind": "use",
+   "value": 30,
+   "tint": [
+    0.5,
+    1.0,
+    0.9
+   ]
   }
  },
  "loot_base": [
@@ -768,7 +778,8 @@
  "shop_stock": {
   "always": [
    "potion",
-   "herb"
+   "herb",
+   "cleanse_potion"
   ],
   "tier2": [
    "sword_iron",

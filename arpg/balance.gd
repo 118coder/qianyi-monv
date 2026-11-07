@@ -330,6 +330,7 @@ static func defaults() -> Dictionary:
 			"gems": {"name": "魔石", "kind": "goods", "value": 60, "tint": [0.45, 0.6, 1.0]},
 			"orb": {"name": "宝玉", "kind": "goods", "value": 120, "tint": [1.0, 0.75, 0.3]},
 			"potion": {"name": "回复药水", "kind": "use", "heal": 50, "value": 25, "tint": [1.0, 0.42, 0.48]},
+			"purge": {"name": "净化卷轴", "kind": "use", "purge": true, "value": 18, "tint": [0.5, 0.8, 1.0]},
 		},
 		"apc_units": {
 			"mercenary": {"name": "佣兵·铁岩", "sprite": ["res://assets/chars/Actor1.png", 0, 0], "hp": 90, "sp": 40,
@@ -337,7 +338,7 @@ static func defaults() -> Dictionary:
 		},
 		"loot_base": [["herb", 5], ["ore", 4], ["gems", 2], ["potion", 3]],
 		"loot_f2_add": [["gems", 2]], "loot_f3_add": [["orb", 1]],
-		"drop_base": [["herb", 5], ["ore", 3], ["potion", 2]],
+		"drop_base": [["herb", 5], ["ore", 3], ["potion", 2], ["purge", 1]],
 		"drop_f2_add": [["gems", 1]], "drop_f4_add": [["orb", 1]],
 		"floor_pools": {
 			"1": [["imp", 5], ["harpy", 3]],
