@@ -20,6 +20,7 @@ var _potion_mash_t := 0.0        # 喝药后狂按检测窗口剩余
 var _potion_mash_gain := 0.0     # 本窗口已累计的狂按加分（封顶）
 var _idle_t := 0.0               # 玩家连续站桩时长
 var _was_aggressive := false     # 凶暴档播报去重
+var _pb_t := 0.0                 # 贴脸采样节流（nearest 是全桶扫，万敌下太贵，4Hz 足够）
 
 ## main._process 每帧喂的语义动作（dodge/parry 在批次 3/4 注册后自动生效）
 const FEED_ACTIONS := ["attack", "skill", "skill2", "skill3", "potion", "interact", "purge"]
@@ -136,9 +137,14 @@ func update(delta: float, player: Node2D, mobs) -> void:
 	# 低血：持续加分（血量压力是 Boss 最强的进攻信号）
 	if float(player.hp) / float(player.max_hp) < _gain("low_hp_ratio", 0.3):
 		value += _gain("low_hp_per_s", 1.5) * delta
-	# 贴脸输出：近身缠斗持续加分
-	if mobs != null and mobs.nearest(player.position, _gain("point_blank_dist", 95.0)) >= 0:
-		value += _gain("point_blank_per_s", 1.2) * delta
+	# 贴脸输出：近身缠斗持续加分。节流采样 4Hz（nearest 是「桶内逐怪算距离」，
+	# 万敌压测玩家被上千怪围住时每帧扫就是几毫秒——与分离力同哲学：规模超限自动降级）
+	if mobs != null and mobs.count <= 300:
+		_pb_t -= delta
+		if _pb_t <= 0.0:
+			_pb_t = 0.25
+			if mobs.nearest(player.position, _gain("point_blank_dist", 95.0)) >= 0:
+				value += _gain("point_blank_per_s", 1.2) * 0.25
 	# 站桩：稳定走位的极端形态——缓慢减压（Boss 侧对应「观察/试探」招）
 	if player.get("_moving") == true:
 		_idle_t = 0.0
