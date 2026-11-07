@@ -416,6 +416,15 @@ func build_floor() -> void:
 			push_warning("场景 %s 加载失败，回退随机生成" % scene_name)
 			dungeon.generate(floor_no, dungeon_seed + floor_no * 7919 if dungeon_seed != 0 else -1,
 				maxi(2, ArpgBalance.max_footprint()))
+	elif dungeon.boss_floor and FileAccess.file_exists("res://data/scenes/boss001.json"):
+		# 方案 B 最小版：Boss 层用手搭圣所（boss001.json 存在即用；无则随机 Boss 房）
+		var bd: ArpgDungeon = ArpgSceneLoader.load_dungeon("res://data/scenes/boss001.json")
+		if bd != null:
+			dungeon = bd
+			dungeon.boss_floor = true   # loader 默认关 Boss 层（试玩模式语义），这里恢复
+		else:
+			dungeon.generate(floor_no, dungeon_seed + floor_no * 7919 if dungeon_seed != 0 else -1,
+				maxi(2, ArpgBalance.max_footprint()))
 	else:
 		# 走廊宽度下限 = 全场最大实体占几格（大角色进得去，不靠玩家撞墙才发现）
 		dungeon.generate(floor_no, dungeon_seed + floor_no * 7919 if dungeon_seed != 0 else -1,
@@ -490,7 +499,13 @@ func build_floor() -> void:
 		_setup_stress()
 	elif dungeon.boss_floor:
 		var room: Rect2i = dungeon.rooms[0]
-		world.spawn_mob("boss", Vector2i(room.end.x - 4, room.position.y + room.size.y / 2), false, true)
+		# Boss 落点：手搭场景（rooms 是大包围盒）用 stair_cell（BFS 最远可走格）；
+		# 随机 Boss 房仍用房间右缘。两者都保证 Boss 不卡墙。
+		var boss_cell := Vector2i(room.end.x - 4, room.position.y + room.size.y / 2)
+		if dungeon.stair_cell.x >= 0 and dungeon.is_floor(dungeon.stair_cell) \
+				and dungeon.tile_ids.size() > 0:
+			boss_cell = dungeon.stair_cell
+		world.spawn_mob("boss", boss_cell, false, true)
 		for i in 2:
 			world.spawn_mob("imp", dungeon.random_cell_in(room), false, false)
 		hud.log("魔王的气息逼近——击败它就能凯旋！")

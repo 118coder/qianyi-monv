@@ -322,6 +322,17 @@ func _run() -> void:
 		_check(fc > 400, "地板格数 %d（手搭布局生效）" % fc)
 	var sd_bad: ArpgDungeon = ArpgSceneLoader.load_dungeon("res://data/scenes/not_exist.json")
 	_check(sd_bad == null, "缺失场景回退 null（调用方回退随机）")
+	# 方案 B 最小版：Boss 层手搭圣所（boss001.json → Boss 落点 BFS 最远可走格）
+	var bd: ArpgDungeon = ArpgSceneLoader.load_dungeon("res://data/scenes/boss001.json")
+	if bd != null:
+		bd.boss_floor = true
+		_check(bd.is_floor(bd.stair_cell), "Boss 圣所落点可走（%s）" % bd.stair_cell)
+		var p2c: int = 0
+		for x in bd.w:
+			for y in bd.h:
+				if bd.grid[x][y] == ArpgDungeon.FLOOR:
+					p2c += 1
+		_check(p2c > 280, "圣所地板 %d 格（圆形布局生效）" % p2c)
 	# Boss 二阶段：参数载入 + enrage 触发链路（降到 40% 血 → 横幅+召唤不崩）
 	var bcfg2: Dictionary = ArpgBalance.data.get("boss", {})
 	_check(int(bcfg2.get("phase2_nova", 0)) == 16 and int(bcfg2.get("phase2_summon", 0)) == 2,
