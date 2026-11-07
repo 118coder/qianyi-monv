@@ -735,6 +735,33 @@
     "gold": 300,
     "xp": 60
    }
+  },
+  "q_d1": {
+   "name": "日常·清剿巡逻",
+   "desc": "每日击败 10 只魔物（次日刷新）",
+   "type": "kill",
+   "target": "any",
+   "count": 10,
+   "requires": "q_intro",
+   "rewards": {
+    "gold": 35
+   },
+   "daily": true
+  },
+  "q_d2": {
+   "name": "日常·矿脉巡查",
+   "desc": "每日拾取 3 个铁矿（次日刷新）",
+   "type": "collect",
+   "target": "ore",
+   "count": 3,
+   "requires": "q_hunt",
+   "rewards": {
+    "gold": 25,
+    "item": {
+     "potion": 1
+    }
+   },
+   "daily": true
   }
  },
  "sell_ratio": 0.6,

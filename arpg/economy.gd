@@ -32,6 +32,13 @@ func settle() -> Dictionary:
 	var overdue := 0
 	if rent > 0:
 		rpg.day += 1
+		# 日常委托刷新：daily 任务在新的一天重置（done/claimed → active），支撑第 2 天起的稳定收入线
+		for qid in rpg.quests:
+			var qd: Dictionary = rpg.quests[qid]
+			if bool(ArpgBalance.data.get("quests", {}).get(qid, {}).get("daily", false)) 					and str(qd.get("state", "")) in ["done", "claimed"]:
+				qd["state"] = "active"
+				qd["progress"] = 0
+				qd.erase("notified")
 		if rpg.gold >= rent:
 			rpg.gold -= rent
 			rpg.debt_paid += rent
