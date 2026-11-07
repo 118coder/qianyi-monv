@@ -138,6 +138,26 @@ static func load_dungeon(path: String) -> ArpgDungeon:
 	return dun
 
 
+## 轻量贴片加载（方案 B 扩展：房间内障碍地形）：
+## 返回 {w, h, cells}；cells 值 0=保留原样 / 1=强制地板 / 2=障碍（变墙）。失败返回 null。
+static func load_patch(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed = JSON.parse_string(f.get_as_text())
+	if not (parsed is Dictionary):
+		return {}
+	var d: Dictionary = parsed
+	var w: int = int(d.get("width", 0))
+	var h: int = int(d.get("height", 0))
+	var cells: Array = d.get("cells", [])
+	if w <= 0 or h <= 0 or cells.size() < w * h:
+		return {}
+	return {"w": w, "h": h, "cells": cells}
+
+
 ## flood fill 地板连通块 → 包围盒列表（面积降序）
 static func _rooms_from(dun: ArpgDungeon) -> Array:
 	var out: Array = []
