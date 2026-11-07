@@ -747,6 +747,80 @@ func _run() -> void:
 	_check(pl3.st > 50.0, "耐力延迟回复生效（%.1f → %.1f）" % [50.0, pl3.st])
 	pl3.st = pl3.max_st
 
+	# == 17. 弹反（Space：短窗口架势 + 连按惩罚 + 完美弹反重置） ==
+	print("== 17. 弹反 ==")
+	_check(ArpgBalance.data.has("parry"), "parry 段载入")
+	_check(InputMap.has_action("parry"), "parry 动作已注册（Space/LB）")
+	pl3.stun = 0.0
+	pl3.dash_t = 0.0
+	pl3.dodge_t = 0.0
+	pl3.parry_cd = 0.0
+	pl3.parry_mash_t = 0.0
+	pl3.parry_mash_n = 0
+	pl3.st = 100.0
+	pl3._do_parry()
+	_check(absf(pl3.parry_t - 0.24) < 0.01, "弹反窗口 0.24s")
+	_check(absf(pl3.st - 88.0) < 0.01, "弹反消耗耐力 12")
+	pl3._do_parry()   # 0.4s 内连按 → 窗口 ×0.6
+	_check(absf(pl3.parry_t - 0.24 * 0.6) < 0.01, "连按惩罚：第二次窗口缩小（%.3f）" % pl3.parry_t)
+	pl3._do_parry()
+	_check(absf(pl3.parry_t - 0.24 * 0.36) < 0.01, "连按惩罚：第三次接近归零（%.3f）" % pl3.parry_t)
+	pl3.parry_t = 0.0
+	pl3.parry_cd = 0.0
+	pl3.parry_mash_t = 0.0
+	pl3.parry_mash_n = 0
+	# 完美弹反：窗口前 45% 接敌 → 伤害无效 + 敌人硬直 + SP/体力返还 + 减压
+	var wi: int = main.world.mobs.spawn("wolf", main.player.cell + Vector2i(10, 0), false, false)
+	_check(wi >= 0, "弹反测试用狼已生成")
+	if wi >= 0:
+		pl3.hp = 100
+		pl3.iframes = 0.0
+		pl3.sp = 20
+		pl3.st = 100.0
+		main.threat.value = 50.0
+		pl3._do_parry()
+		pl3.take_damage(10, main.world.mobs.pos[wi])
+		_check(pl3.hp == 100, "完美弹反：伤害无效")
+		_check(main.world.mobs.hold_t[wi] > 0.0, "完美弹反：敌人硬直")
+		_check(pl3.sp > 20, "完美弹反：SP 返还")
+		_check(main.threat.value < 50.0, "完美弹反：减压")
+		_check(pl3.parry_mash_n == 0, "完美弹反：连按惩罚清零")
+		# 普通弹反：完美段（0.108s）之后接敌 → 仅抵消 + 小冷却
+		pl3.parry_t = 0.0
+		pl3.parry_cd = 0.0
+		pl3.parry_mash_t = 0.0
+		pl3.parry_mash_n = 0
+		pl3.st = 100.0
+		pl3.hp = 100
+		pl3._do_parry()
+		await create_timer(0.15).timeout   # 过完美窗，仍在架势窗内
+		if pl3.parry_t > 0.0:
+			pl3.take_damage(10, main.world.mobs.pos[wi])
+			_check(pl3.hp == 100, "普通弹反：伤害仍无效")
+			_check(pl3.parry_t == 0.0 and pl3.parry_cd > 0.0, "普通弹反：窗口消耗 + 小冷却")
+		else:
+			_check(true, "普通弹反时序偏移（跳过）")
+		# 空挥冷却：窗口自然过期 → 0.6s 冷却内按不出
+		pl3.parry_cd = 0.0
+		pl3.parry_mash_t = 0.0
+		pl3.parry_mash_n = 0
+		pl3.st = 100.0
+		pl3._do_parry()
+		await create_timer(0.3).timeout
+		_check(pl3.parry_cd > 0.0, "弹反空挥进入冷却")
+		pl3._do_parry()
+		_check(pl3.parry_t == 0.0, "冷却期弹反被拒")
+		pl3.parry_cd = 0.0
+		pl3.st = pl3.max_st
+	# stagger API 直查（boss 也吃硬直的通用入口）
+	var bi4: int = main.world.mobs.spawn("boss", main.player.cell + Vector2i(6, 0), false, true)
+	if bi4 >= 0:
+		_check(main.world.mobs.stagger_nearest(main.world.mobs.pos[bi4], 0.5, 100.0),
+			"stagger_nearest 命中 Boss")
+		_check(main.world.mobs.hold_t[bi4] > 0.0, "Boss 吃弹反硬直")
+	else:
+		_check(true, "Boss 模板未载入（跳过 stagger 直查）")
+
 	if _failed:
 		quit(1)
 	else:

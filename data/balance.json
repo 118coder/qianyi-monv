@@ -1006,6 +1006,21 @@
   "regen": 20.0,
   "regen_delay": 0.6
  },
+ "parry": {
+  "mash_shrink": 0.6,
+  "mash_window": 0.4,
+  "min_window": 0.04,
+  "parry_cd": 0.3,
+  "parry_stagger_knock": 120.0,
+  "parry_stagger_t": 0.3,
+  "perfect_frac": 0.45,
+  "sp_refund": 8,
+  "stagger_knock": 260.0,
+  "stagger_t": 0.9,
+  "stamina_cost": 12.0,
+  "whiff_cd": 0.6,
+  "window": 0.24
+ },
  "threat": {
   "enabled": true,
   "start": 25.0,

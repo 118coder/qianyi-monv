@@ -16,6 +16,7 @@ static func setup() -> void:
 		"interact": [KEY_E],
 		"purge": [KEY_R],   # 净化卷轴（RR 批漏注册：动作没进 InputMap，R 键按不出）
 		"dodge": [KEY_SHIFT],   # 方向闪避（影之刃方案批 3：前快短/后慢长/侧中等）
+		"parry": [KEY_SPACE],   # 弹反（影之刃方案批 4：短窗口架势，连按惩罚）
 	}
 	for action in defs:
 		if not InputMap.has_action(action):
@@ -32,6 +33,7 @@ static func setup() -> void:
 		"interact": [JOY_BUTTON_B],     # B / 圆圈：互动
 		"potion": [JOY_BUTTON_Y],       # Y / 三角：药水
 		"dodge": [JOY_BUTTON_RIGHT_SHOULDER],   # RB：方向闪避
+		"parry": [JOY_BUTTON_LEFT_SHOULDER],    # LB：弹反
 	}
 	for action in face:
 		for b in face[action]:

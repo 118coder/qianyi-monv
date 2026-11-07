@@ -272,6 +272,14 @@ static func defaults() -> Dictionary:
 			"side": {"speed": 640.0, "time": 0.20, "iframes": 0.15},
 		},
 		"stamina": {"max": 100.0, "regen": 20.0, "regen_delay": 0.6},
+		"parry": {
+			"window": 0.24, "perfect_frac": 0.45,
+			"mash_window": 0.4, "mash_shrink": 0.6, "min_window": 0.04,
+			"whiff_cd": 0.6, "parry_cd": 0.3,
+			"stamina_cost": 12.0, "sp_refund": 8,
+			"stagger_t": 0.9, "stagger_knock": 260.0,
+			"parry_stagger_t": 0.3, "parry_stagger_knock": 120.0,
+		},
 		"threat": {
 			"enabled": true, "start": 25.0, "max": 100.0,
 			"gain": {

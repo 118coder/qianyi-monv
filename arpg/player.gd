@@ -78,6 +78,13 @@ var dodge_t := 0.0
 var dodge_dir := Vector2.DOWN
 var dodge_spd := 0.0
 var dodge_ghost_t := 0.0
+# —— 弹反（影之刃方案批 4：Space 短窗口架势，连按惩罚，完美弹反重置）——
+var parry_t := 0.0              # 弹反窗口剩余秒（>0 = 架势中）
+var parry_elapsed := 0.0        # 本次窗口已进行时间（完美窗判定用）
+var parry_perfect_until := 0.0  # 本次窗口的完美段阈值（elapsed <= 它 = 完美弹反）
+var parry_mash_n := 0           # 0.4s 内连续按压次数（窗口缩小档位）
+var parry_mash_t := 0.0         # 距上次按压的计时
+var parry_cd := 0.0             # 空挥/普通弹反后的冷却
 var lunge := Vector2.ZERO       # 攻击前冲冲量
 var knock := Vector2.ZERO
 var _move_vel := Vector2.ZERO   # 平滑移动分量（不含击退/前冲）
@@ -167,6 +174,15 @@ func _physics_process(delta: float) -> void:
 		st_regen_t -= delta
 	else:
 		st = minf(max_st, st + float(ArpgBalance.data.get("stamina", {}).get("regen", 20.0)) * delta)
+	# 弹反窗口/冷却/连按计时
+	if parry_t > 0.0:
+		parry_t -= delta
+		parry_elapsed += delta
+		if parry_t <= 0.0:
+			parry_t = 0.0
+			parry_cd = float(ArpgBalance.data.get("parry", {}).get("whiff_cd", 0.6))   # 空挥惩罚
+	parry_cd = maxf(0.0, parry_cd - delta)
+	parry_mash_t = maxf(0.0, parry_mash_t - delta)
 	# 燃烧 DoT：每秒灼烧（绕护甲的持续伤害；触发死亡流程），0.6s 一次火色火花提示
 	if burn_t > 0.0:
 		burn_t = maxf(0.0, burn_t - delta)
@@ -261,6 +277,8 @@ func _physics_process(delta: float) -> void:
 			_do_attack()
 		if Input.is_action_just_pressed("dodge"):
 			_do_dodge(dir)
+		if Input.is_action_just_pressed("parry"):
+			_do_parry()
 		if Input.is_action_just_pressed("skill"):
 			use_skill(0)
 		if Input.is_action_just_pressed("skill2"):
@@ -512,14 +530,81 @@ func _do_dodge(move_dir: Vector2) -> void:
 	st_regen_t = float(ArpgBalance.data.get("stamina", {}).get("regen_delay", 0.6))
 	pop(0.9, 1.1)
 	main.play_sfx("attack", -12.0)
+	# 成功闪避部分重置弹反连按惩罚（影之刃方案「闪避成功也重置一部分」）
+	parry_mash_n = maxi(0, parry_mash_n - 1)
 	if main.threat != null:
 		main.threat.on_dodge()
+
+
+## 弹反（Space）：短窗口架势——窗口内受击无效；前 45% 为完美段（硬直+SP/体力返还）。
+## 连按惩罚：0.4s 内连续按压 → 窗口逐次 ×0.6（第三次近归零）；完美弹反清零惩罚；
+## 空挥 0.6s 冷却。近战/敌弹/Boss 震地全走 take_damage，天然全部可弹反。
+func _do_parry() -> void:
+	if dead or stun > 0.0 or dash_t > 0.0 or dodge_t > 0.0:
+		return
+	var pcfg: Dictionary = ArpgBalance.data.get("parry", {})
+	if parry_cd > 0.0:
+		return
+	var cost := float(pcfg.get("stamina_cost", 12.0))
+	if st < cost:
+		world.spawn_popup("体力不足", position, Color(0.75, 0.75, 0.75))
+		return
+	# 连按惩罚：距上次按压 0.4s 内再按 → 窗口逐次缩小
+	if parry_mash_t > 0.0:
+		parry_mash_n += 1
+	else:
+		parry_mash_n = 0
+	parry_mash_t = float(pcfg.get("mash_window", 0.4))
+	var win := float(pcfg.get("window", 0.24)) * pow(float(pcfg.get("mash_shrink", 0.6)), parry_mash_n)
+	win = maxf(win, float(pcfg.get("min_window", 0.04)))
+	parry_t = win
+	parry_elapsed = 0.0
+	parry_perfect_until = win * float(pcfg.get("perfect_frac", 0.45))
+	st -= cost
+	st_regen_t = float(ArpgBalance.data.get("stamina", {}).get("regen_delay", 0.6))
+	pop(0.85, 1.05)
+
+
+## 弹反结算（take_damage 窗口内调用）：perfect = 完美段内接敌
+func _resolve_parry(dmg: int, from_pos: Vector2) -> void:
+	var pcfg: Dictionary = ArpgBalance.data.get("parry", {})
+	var perfect := parry_elapsed <= parry_perfect_until
+	parry_t = 0.0
+	if perfect:
+		# 完美弹反：敌人硬直 + 惩罚清零 + SP/体力返还 + 顿帧（应对连按惩罚的「重置」）
+		parry_mash_n = 0
+		parry_cd = 0.0
+		st = minf(max_st, st + float(pcfg.get("stamina_cost", 12.0)))
+		sp = mini(max_sp, sp + int(pcfg.get("sp_refund", 8)))
+		hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
+		if world.mobs != null:
+			world.mobs.stagger_nearest(from_pos, float(pcfg.get("stagger_t", 0.9)),
+				float(pcfg.get("stagger_knock", 260.0)))
+		world.spawn_popup("完美弹反！", position + Vector2(0, -36), Color(1.0, 0.85, 0.35), 22)
+		world.spawn_nova(position, Color(1.0, 0.85, 0.4))
+		main.hit_stop(0.08, 0.05)
+		main.play_sfx("magic", -4.0)
+		main.add_shake(0.25)
+	else:
+		# 普通弹反：仅抵消这一下，轻硬直 + 小冷却（连按惩罚不清零）
+		parry_cd = float(pcfg.get("parry_cd", 0.3))
+		if world.mobs != null:
+			world.mobs.stagger_nearest(from_pos, float(pcfg.get("parry_stagger_t", 0.3)),
+				float(pcfg.get("parry_stagger_knock", 120.0)))
+		world.spawn_popup("弹反", position + Vector2(0, -36), Color(0.8, 0.88, 1.0), 18)
+	main.rumble(0.3, 0.6, 0.2)
+	if main.threat != null:
+		main.threat.on_parry(perfect)   # 弹反成功减压（完美 -6 / 普通 -2）
 
 
 # ———————— 受击 / 成长 ————————
 
 func take_damage(dmg: int, from_pos: Vector2) -> void:
 	if dead or iframes > 0.0 or main.state != main.State.PLAY:
+		return
+	# 弹反窗口：伤害无效——近战/敌弹/Boss 震地全走本入口，天然全部可弹反
+	if parry_t > 0.0:
+		_resolve_parry(dmg, from_pos)
 		return
 	# 易伤状态：受伤 ×1.3（brittle 词缀命中后 3s）
 	if hurt_amp_t > 0.0:
