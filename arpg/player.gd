@@ -70,6 +70,27 @@ var dash_t := 0.0
 var dash_dir := Vector2.DOWN
 var dash_hit := {}
 var dash_ghost_t := 0.0
+# —— 耐力 / 方向闪避（影之刃方案批 3：Shift 闪避，前快短/后慢长/侧中等）——
+var max_st := 100.0
+var st := 100.0
+var st_regen_t := 0.0           # 体力回复延迟（消耗动作后 0.6s 才开始回）
+var dodge_t := 0.0
+var dodge_dir := Vector2.DOWN
+var dodge_spd := 0.0
+var dodge_ghost_t := 0.0
+# —— 弹反（影之刃方案批 4：Space 短窗口架势，连按惩罚，完美弹反重置）——
+var parry_t := 0.0              # 弹反窗口剩余秒（>0 = 架势中）
+var parry_elapsed := 0.0        # 本次窗口已进行时间（完美窗判定用）
+var parry_perfect_until := 0.0  # 本次窗口的完美段阈值（elapsed <= 它 = 完美弹反）
+var parry_mash_n := 0           # 0.4s 内连续按压次数（窗口缩小档位）
+var parry_mash_t := 0.0         # 距上次按压的计时
+var parry_cd := 0.0             # 空挥/普通弹反后的冷却
+# —— 蓄力重击（影之刃方案批 5：按住攻击 ≥0.45s 自动出重击，SP 富余时泛蓝光强化）——
+var atk_hold_t := 0.0           # 攻击键按住时长
+var atk_charge_fired := false   # 本次按住是否已触发过重击（一次按住只出一记）
+# —— 药水前摇（批 5：主控喝药 0.35s 后结算，走位可走）——
+var potion_t := 0.0             # 喝药前摇剩余秒（>0 = 回血未到账）
+var potion_heal := 0            # 前摇结束后的回血量
 var lunge := Vector2.ZERO       # 攻击前冲冲量
 var knock := Vector2.ZERO
 var _move_vel := Vector2.ZERO   # 平滑移动分量（不含击退/前冲）
@@ -115,6 +136,8 @@ func setup(id: String, m: Node, w: Node) -> void:
 	atk = tpl["atk"]
 	spd = float(tpl["spd"])
 	atk_range = float(tpl["atk_range"])
+	max_st = float(ArpgBalance.data.get("stamina", {}).get("max", 100.0))
+	st = max_st
 
 	command_queue = ArpgCommandQueue.new()
 	command_queue.push("follow")
@@ -152,6 +175,34 @@ func _physics_process(delta: float) -> void:
 	stun = maxf(0.0, stun - delta)
 	slow_t = maxf(0.0, slow_t - delta)
 	hurt_amp_t = maxf(0.0, hurt_amp_t - delta)
+	# 药水前摇：到点结算回血（走位可走；被击杀则药水作废——喝药的时机风险）
+	if potion_t > 0.0:
+		potion_t -= delta
+		if potion_t <= 0.0:
+			potion_t = 0.0
+			var healed := potion_heal
+			potion_heal = 0
+			hp = mini(max_hp, hp + healed)
+			heal_flash()
+			hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
+			world.spawn_popup("+%d" % healed, position, Color(0.5, 1, 0.55))
+			world.spawn_nova(position, Color(0.5, 1, 0.6))
+			world.spawn_pxfx("heal", position + Vector2(0, -6), {"scale": 0.6, "speed": 1.4})
+			main.play_sfx("heal")
+	# 耐力回复：消耗动作后延迟 regen_delay 才开始回（防「消耗-瞬间回满」刷循环）
+	if st_regen_t > 0.0:
+		st_regen_t -= delta
+	else:
+		st = minf(max_st, st + float(ArpgBalance.data.get("stamina", {}).get("regen", 20.0)) * delta)
+	# 弹反窗口/冷却/连按计时
+	if parry_t > 0.0:
+		parry_t -= delta
+		parry_elapsed += delta
+		if parry_t <= 0.0:
+			parry_t = 0.0
+			parry_cd = float(ArpgBalance.data.get("parry", {}).get("whiff_cd", 0.6))   # 空挥惩罚
+	parry_cd = maxf(0.0, parry_cd - delta)
+	parry_mash_t = maxf(0.0, parry_mash_t - delta)
 	# 燃烧 DoT：每秒灼烧（绕护甲的持续伤害；触发死亡流程），0.6s 一次火色火花提示
 	if burn_t > 0.0:
 		burn_t = maxf(0.0, burn_t - delta)
@@ -214,6 +265,15 @@ func _physics_process(delta: float) -> void:
 		velocity = dash_dir * DASH_SPEED
 		_move_vel = dash_dir * spd * 0.5   # 冲刺结束保留部分动量，衔接更顺
 		_dash_hits()
+	elif dodge_t > 0.0:
+		# 方向闪避：匀速位移 + 绿白残影（无敌帧走 iframes，take_damage 自动豁免）
+		dodge_t -= delta
+		dodge_ghost_t -= delta
+		if dodge_ghost_t <= 0.0:
+			dodge_ghost_t = 0.035
+			world.spawn_ghost(sprite, position + Vector2(0, -6), Color(0.85, 1.0, 0.9, 0.5))
+		velocity = dodge_dir * dodge_spd
+		_move_vel = dodge_dir * spd * 0.5
 	elif stun > 0.0:
 		velocity = knock
 		_move_vel = Vector2.ZERO
@@ -235,6 +295,30 @@ func _physics_process(delta: float) -> void:
 	if stun <= 0.0 and possessed:
 		if Input.is_action_just_pressed("attack") and atk_timer <= 0.0:
 			_do_attack()
+		# 蓄力重击：按住攻击键累积，达阈值自动出重击（轻点普攻节奏不变）
+		if Input.is_action_pressed("attack"):
+			if not atk_charge_fired:
+				atk_hold_t += delta
+				var hcfg: Dictionary = ArpgBalance.data.get("heavy", {})
+				var ctime := float(hcfg.get("charge_time", 0.45))
+				if atk_hold_t < ctime:
+					# 蓄力读感：精灵渐泛蓝（越满越蓝，提示重击将至）
+					var crg := clampf(atk_hold_t / ctime, 0.0, 1.0)
+					if atk_hold_t > 0.12:
+						sprite.modulate = Color(1, 1, 1).lerp(Color(0.55, 0.75, 1.0), crg * 0.75)
+				else:
+					atk_charge_fired = true
+					sprite.modulate = Color.WHITE
+					_do_heavy()
+		else:
+			atk_hold_t = 0.0
+			atk_charge_fired = false
+			if sprite.modulate != Color(1, 0.35, 0.35):
+				sprite.modulate = Color.WHITE
+		if Input.is_action_just_pressed("dodge"):
+			_do_dodge(dir)
+		if Input.is_action_just_pressed("parry"):
+			_do_parry()
 		if Input.is_action_just_pressed("skill"):
 			use_skill(0)
 		if Input.is_action_just_pressed("skill2"):
@@ -393,6 +477,44 @@ func _do_attack() -> void:
 	world.main.play_sfx("magic" if weapon == "magic" else "attack", -10.0 if weapon == "magic" else -6.0)
 
 
+## 蓄力重击（按住攻击 0.45s 自动触发）：基础 ×1.4；SP 富余（≥35%）泛蓝光 ×1.3 并消耗 SP，
+## SP 不足仍可出但 ×0.77 无光——「MP 条预判强化状态」的可读语言（影之刃方案 §五-4）。
+## 返回实际应用的伤害倍率（测试断言用）。
+func _do_heavy() -> float:
+	if stun > 0.0 or dead:
+		return 0.0
+	var hcfg: Dictionary = ArpgBalance.data.get("heavy", {})
+	var emp := float(sp) / float(max_sp) >= float(hcfg.get("emp_sp_ratio", 0.35))
+	var mult := float(hcfg.get("mult", 1.4))
+	if emp:
+		mult *= float(hcfg.get("emp_mult", 1.3))
+		sp = maxi(0, sp - int(hcfg.get("sp_cost", 12)))
+		hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
+	else:
+		mult *= float(hcfg.get("weak_mult", 0.77))
+	atk_timer = float(tpl["atk_cd"]) * float(hcfg.get("cd_mult", 1.2))
+	var weapon: String = tpl["weapon"]
+	pop(1.25, 0.82)
+	if weapon == "melee":
+		lunge = facing * 260.0
+		world.spawn_slash(position + facing * 15.0, facing.angle(),
+			Color(0.55, 0.75, 1.0) if emp else Color(0.75, 0.78, 0.85))
+		for i in world.mobs_in_arc(position, facing.angle(), atk_range + 10.0, 1.35):
+			world.damage_mob(i, int(eff_atk() * mult), position, 240.0)
+	else:
+		lunge = -facing * 90.0
+		world.spawn_projectile(position + facing * 14.0, facing, float(tpl["proj_spd"]),
+			int(eff_atk() * mult), "player",
+			Color(0.55, 0.75, 1.0) if emp else Color(0.75, 0.78, 0.85),
+			"arrow" if weapon == "ranged" else "orb")
+	if emp:
+		world.spawn_nova(position, Color(0.55, 0.75, 1.0, 0.7))
+	main.play_sfx("attack", -3.0)
+	main.add_shake(0.22 if emp else 0.12)
+	main.rumble(0.3, 0.55, 0.18)
+	return mult
+
+
 # ———————— 技能系统 v2（数据驱动：balance.skills + char_skills + 等级解锁） ————————
 
 func use_skill(slot: int) -> void:
@@ -457,10 +579,110 @@ func _dash_hits() -> void:
 		world.damage_mob(i, int(eff_atk() * dash_dmg_mult), position, 260.0, true)
 
 
+## 方向闪避（Shift）：前闪快而短 / 后闪慢而长且无敌帧更长 / 侧闪中等——方向取舍。
+## 无敌帧复用 iframes（take_damage 自动豁免）；残影复用 world.spawn_ghost；
+## 消耗耐力（不足拒绝）；成功闪避减压（threat.on_dodge，影之刃方案「闪避成功扣分」的映射）。
+func _do_dodge(move_dir: Vector2) -> void:
+	if dead or dodge_t > 0.0 or dash_t > 0.0 or stun > 0.0:
+		return
+	var dcfg: Dictionary = ArpgBalance.data.get("dodge", {})
+	var cost := float(dcfg.get("cost", 25.0))
+	if st < cost:
+		world.spawn_popup("体力不足", position, Color(0.75, 0.75, 0.75))
+		return
+	# 方向分类：移动输入与朝向的点积 → 前/后/侧（无输入默认前闪）
+	var d := move_dir.normalized() if move_dir.length_squared() > 0.001 else facing
+	var dotv := d.dot(facing)
+	var bname := "side"
+	if dotv > 0.5:
+		bname = "forward"
+	elif dotv < -0.5:
+		bname = "back"
+	var bcfg: Dictionary = dcfg.get(bname, {})
+	dodge_spd = float(bcfg.get("speed", 640.0))
+	dodge_t = float(bcfg.get("time", 0.20))
+	iframes = maxf(iframes, float(bcfg.get("iframes", 0.15)))
+	dodge_dir = d
+	dodge_ghost_t = 0.0
+	st -= cost
+	st_regen_t = float(ArpgBalance.data.get("stamina", {}).get("regen_delay", 0.6))
+	pop(0.9, 1.1)
+	main.play_sfx("attack", -12.0)
+	# 成功闪避部分重置弹反连按惩罚（影之刃方案「闪避成功也重置一部分」）
+	parry_mash_n = maxi(0, parry_mash_n - 1)
+	if main.threat != null:
+		main.threat.on_dodge()
+
+
+## 弹反（Space）：短窗口架势——窗口内受击无效；前 45% 为完美段（硬直+SP/体力返还）。
+## 连按惩罚：0.4s 内连续按压 → 窗口逐次 ×0.6（第三次近归零）；完美弹反清零惩罚；
+## 空挥 0.6s 冷却。近战/敌弹/Boss 震地全走 take_damage，天然全部可弹反。
+func _do_parry() -> void:
+	if dead or stun > 0.0 or dash_t > 0.0 or dodge_t > 0.0:
+		return
+	var pcfg: Dictionary = ArpgBalance.data.get("parry", {})
+	if parry_cd > 0.0:
+		return
+	var cost := float(pcfg.get("stamina_cost", 12.0))
+	if st < cost:
+		world.spawn_popup("体力不足", position, Color(0.75, 0.75, 0.75))
+		return
+	# 连按惩罚：距上次按压 0.4s 内再按 → 窗口逐次缩小
+	if parry_mash_t > 0.0:
+		parry_mash_n += 1
+	else:
+		parry_mash_n = 0
+	parry_mash_t = float(pcfg.get("mash_window", 0.4))
+	var win := float(pcfg.get("window", 0.24)) * pow(float(pcfg.get("mash_shrink", 0.6)), parry_mash_n)
+	win = maxf(win, float(pcfg.get("min_window", 0.04)))
+	parry_t = win
+	parry_elapsed = 0.0
+	parry_perfect_until = win * float(pcfg.get("perfect_frac", 0.45))
+	st -= cost
+	st_regen_t = float(ArpgBalance.data.get("stamina", {}).get("regen_delay", 0.6))
+	pop(0.85, 1.05)
+
+
+## 弹反结算（take_damage 窗口内调用）：perfect = 完美段内接敌
+func _resolve_parry(dmg: int, from_pos: Vector2) -> void:
+	var pcfg: Dictionary = ArpgBalance.data.get("parry", {})
+	var perfect := parry_elapsed <= parry_perfect_until
+	parry_t = 0.0
+	if perfect:
+		# 完美弹反：敌人硬直 + 惩罚清零 + SP/体力返还 + 顿帧（应对连按惩罚的「重置」）
+		parry_mash_n = 0
+		parry_cd = 0.0
+		st = minf(max_st, st + float(pcfg.get("stamina_cost", 12.0)))
+		sp = mini(max_sp, sp + int(pcfg.get("sp_refund", 8)))
+		hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
+		if world.mobs != null:
+			world.mobs.stagger_nearest(from_pos, float(pcfg.get("stagger_t", 0.9)),
+				float(pcfg.get("stagger_knock", 260.0)))
+		world.spawn_popup("完美弹反！", position + Vector2(0, -36), Color(1.0, 0.85, 0.35), 22)
+		world.spawn_nova(position, Color(1.0, 0.85, 0.4))
+		main.hit_stop(0.08, 0.05)
+		main.play_sfx("magic", -4.0)
+		main.add_shake(0.25)
+	else:
+		# 普通弹反：仅抵消这一下，轻硬直 + 小冷却（连按惩罚不清零）
+		parry_cd = float(pcfg.get("parry_cd", 0.3))
+		if world.mobs != null:
+			world.mobs.stagger_nearest(from_pos, float(pcfg.get("parry_stagger_t", 0.3)),
+				float(pcfg.get("parry_stagger_knock", 120.0)))
+		world.spawn_popup("弹反", position + Vector2(0, -36), Color(0.8, 0.88, 1.0), 18)
+	main.rumble(0.3, 0.6, 0.2)
+	if main.threat != null:
+		main.threat.on_parry(perfect)   # 弹反成功减压（完美 -6 / 普通 -2）
+
+
 # ———————— 受击 / 成长 ————————
 
 func take_damage(dmg: int, from_pos: Vector2) -> void:
 	if dead or iframes > 0.0 or main.state != main.State.PLAY:
+		return
+	# 弹反窗口：伤害无效——近战/敌弹/Boss 震地全走本入口，天然全部可弹反
+	if parry_t > 0.0:
+		_resolve_parry(dmg, from_pos)
 		return
 	# 易伤状态：受伤 ×1.3（brittle 词缀命中后 3s）
 	if hurt_amp_t > 0.0:

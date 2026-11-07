@@ -259,6 +259,28 @@ func is_alive(i: int) -> bool:
 	return i >= 0 and i < count and alive[i] == 1 and hp[i] > 0
 
 
+## 弹反硬直：击退并短暂压制最近敌人（hold_t 站定，Boss 同样吃硬直）。
+## 主线程调用（player._resolve_parry）；找不到范围内敌人返回 false。
+## 线性扫而非空间哈希：弹反发生在帧中段，本帧新生的怪（Boss 召唤等）不在帧首哈希里。
+func stagger_nearest(from_pos: Vector2, dur: float, knock_amt: float) -> bool:
+	var best := -1
+	var bd := 90.0 * 90.0
+	for j in count:
+		if alive[j] == 0 or hp[j] <= 0:
+			continue
+		var dsp := pos[j].distance_squared_to(from_pos)
+		if dsp < bd:
+			bd = dsp
+			best = j
+	if best < 0:
+		return false
+	hold_t[best] = maxf(hold_t[best], dur)
+	knock[best] += (pos[best] - from_pos).normalized() * knock_amt
+	flash_t[best] = 0.15
+	aggro[best] = 1
+	return true
+
+
 ## 词缀中文名（affixes 表 key 顺序约定见 AFFIX_IDS）；无词缀返回 ""
 func affix_name(i: int) -> String:
 	if i < 0 or i >= count or affix[i] == 0:
@@ -642,6 +664,12 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 		# 因此每帧只处理 _sep_budget 只屏内怪，用游标轮转保证长期覆盖所有怪。
 		if _sep_quality and (_sep_all or _sep_set.has(i)):
 			_accumulate_separation(i)
+		# 弹反硬直 / Boss 观察招：站定（全行为通用；硬直期间 windup/闸门全部冻结）
+		if hold_t[i] > 0.0:
+			hold_t[i] -= d
+			vel[i] = Vector2.ZERO
+			_try_move(i, d)
+			continue
 		if not aggro[i]:
 			# LOS 仇恨：不隔墙索敌。DDA 只在这个怪「没 aggro 且进了半径」时才需要，
 			# 且结果按「怪所在格 + 目标格」缓存（任一跨格才重算）→ 静止时零成本
@@ -688,23 +716,18 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 				cool_t[i] = tpl_cool[tpl[i]]
 		elif beh == 2:
 			special_t[i] -= d
-			if hold_t[i] > 0.0:
-				# 观察/硬直：站定（观察招与弹反硬直共用 hold_t；nova 保底计时照常走）
-				hold_t[i] -= d
-				vel[i] = Vector2.ZERO
-			else:
-				pool_t[i] = maxf(0.0, pool_t[i] - d)
-				if enraged[i] == 0 and hp[i] < max_hp[i] * _enrage_at:
-					enraged[i] = 1
-					spd[i] = tpl_spd[tpl[i]] * 1.35
-					# 二阶段开场：横幅警告 + 召唤护主小鬼（一次性，走主线程事件队列）
-					ev.append([EV_ENRAGE, i])
-				if special_t[i] <= 0.0:
-					special_t[i] = 2.6 if enraged[i] == 1 else 3.4
-					ev.append([EV_SPECIAL, i])
-				if pool_t[i] <= 0.0:
-					_boss_pick_move(i, to_p, dist, ev)
-				_melee_move(i, to_p, dist, ev)
+			pool_t[i] = maxf(0.0, pool_t[i] - d)
+			if enraged[i] == 0 and hp[i] < max_hp[i] * _enrage_at:
+				enraged[i] = 1
+				spd[i] = tpl_spd[tpl[i]] * 1.35
+				# 二阶段开场：横幅警告 + 召唤护主小鬼（一次性，走主线程事件队列）
+				ev.append([EV_ENRAGE, i])
+			if special_t[i] <= 0.0:
+				special_t[i] = 2.6 if enraged[i] == 1 else 3.4
+				ev.append([EV_SPECIAL, i])
+			if pool_t[i] <= 0.0:
+				_boss_pick_move(i, to_p, dist, ev)
+			_melee_move(i, to_p, dist, ev)
 		elif beh == 1:
 			_ranged_move(i, to_p, dist)
 		else:

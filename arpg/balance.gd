@@ -265,6 +265,26 @@ static func defaults() -> Dictionary:
 			"arc_blend": 0.22,
 			"strafe_ratio": 0.5
 		},
+		"dodge": {
+			"cost": 25.0,
+			"forward": {"speed": 720.0, "time": 0.16, "iframes": 0.10},
+			"back": {"speed": 560.0, "time": 0.26, "iframes": 0.20},
+			"side": {"speed": 640.0, "time": 0.20, "iframes": 0.15},
+		},
+		"stamina": {"max": 100.0, "regen": 20.0, "regen_delay": 0.6},
+		"parry": {
+			"window": 0.24, "perfect_frac": 0.45,
+			"mash_window": 0.4, "mash_shrink": 0.6, "min_window": 0.04,
+			"whiff_cd": 0.6, "parry_cd": 0.3,
+			"stamina_cost": 12.0, "sp_refund": 8,
+			"stagger_t": 0.9, "stagger_knock": 260.0,
+			"parry_stagger_t": 0.3, "parry_stagger_knock": 120.0,
+		},
+		"heavy": {
+			"charge_time": 0.45, "mult": 1.4,
+			"emp_mult": 1.3, "weak_mult": 0.77,
+			"emp_sp_ratio": 0.35, "sp_cost": 12, "cd_mult": 1.2,
+		},
 		"threat": {
 			"enabled": true, "start": 25.0, "max": 100.0,
 			"gain": {
@@ -354,7 +374,7 @@ static func defaults() -> Dictionary:
 			"ore": {"name": "铁矿", "kind": "goods", "value": 22, "tint": [0.68, 0.72, 0.82]},
 			"gems": {"name": "魔石", "kind": "goods", "value": 60, "tint": [0.45, 0.6, 1.0]},
 			"orb": {"name": "宝玉", "kind": "goods", "value": 120, "tint": [1.0, 0.75, 0.3]},
-			"potion": {"name": "回复药水", "kind": "use", "heal": 50, "value": 25, "tint": [1.0, 0.42, 0.48]},
+			"potion": {"name": "回复药水", "kind": "use", "heal": 50, "value": 25, "windup": 0.35, "tint": [1.0, 0.42, 0.48]},
 			"purge": {"name": "净化卷轴", "kind": "use", "purge": true, "value": 18, "tint": [0.5, 0.8, 1.0]},
 		},
 		"apc_units": {

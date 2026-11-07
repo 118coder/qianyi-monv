@@ -752,11 +752,19 @@ func drink_potion() -> void:
 	if threat != null:
 		threat.on_potion()   # 喝药 = 压力信号（Boss 会读，且喝后狂按会追加）
 	var heal: int = int(ArpgBalance.ITEMS["potion"]["heal"])
-	u.hp = mini(u.max_hp, u.hp + heal)
-	u.heal_flash()
-	world.spawn_popup("+%d" % heal, u.position, Color(0.5, 1, 0.55))
-	world.spawn_nova(u.position, Color(0.5, 1, 0.6))
-	world.spawn_pxfx("heal", u.position + Vector2(0, -6), {"scale": 0.6, "speed": 1.4})
+	var pwindup := float(ArpgBalance.ITEMS["potion"].get("windup", 0.0))
+	if pwindup > 0.0 and u == player and not player.dead:
+		# 主控玩家：喝药有前摇（0.35s 后到账，走位可走）——喝药时机成为风险决策
+		player.potion_heal = heal
+		player.potion_t = pwindup
+		world.spawn_popup("喝药…", u.position, Color(0.5, 1, 0.55), 15)
+	else:
+		# 队友被主控/AI 语义：立即到账（保持原行为）
+		u.hp = mini(u.max_hp, u.hp + heal)
+		u.heal_flash()
+		world.spawn_popup("+%d" % heal, u.position, Color(0.5, 1, 0.55))
+		world.spawn_nova(u.position, Color(0.5, 1, 0.6))
+		world.spawn_pxfx("heal", u.position + Vector2(0, -6), {"scale": 0.6, "speed": 1.4})
 	hud.log("%s 喝下回复药水（剩 %d 瓶）" % ["你" if u == player else u.unit_name, _potion_count()])
 	play_sfx("heal")
 

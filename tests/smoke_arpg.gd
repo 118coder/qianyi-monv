@@ -707,6 +707,164 @@ func _run() -> void:
 	else:
 		_check(true, "Boss 模板未载入（跳过招式池链路）")
 
+	# == 16. 耐力与方向闪避（Shift：前快短/后慢长/侧中等） ==
+	print("== 16. 耐力与方向闪避 ==")
+	_check(ArpgBalance.data.has("dodge") and ArpgBalance.data.has("stamina"), "dodge/stamina 段载入")
+	_check(InputMap.has_action("dodge"), "dodge 动作已注册（Shift/RB）")
+	var pl3: ArpgPlayer = main.player
+	_check(absf(pl3.max_st - 100.0) < 0.01 and absf(pl3.st - 100.0) < 0.01, "耐力初始满值")
+	pl3.facing = Vector2.RIGHT
+	pl3.dodge_t = 0.0
+	pl3.dash_t = 0.0
+	pl3.stun = 0.0
+	pl3.iframes = 0.0
+	main.threat.value = 50.0
+	pl3._do_dodge(Vector2(1, 0))   # 前闪（与朝向同向）
+	_check(absf(pl3.dodge_spd - 720.0) < 0.01 and absf(pl3.dodge_t - 0.16) < 0.01, "前闪快而短（720/0.16s）")
+	_check(pl3.iframes >= 0.10, "前闪无敌帧生效")
+	_check(absf(pl3.st - 75.0) < 0.01, "闪避消耗耐力 25")
+	_check(main.threat.value < 50.0, "成功闪避减压（threat.on_dodge）")
+	pl3.dodge_t = 0.0
+	pl3.iframes = 0.0
+	pl3._do_dodge(Vector2(-1, 0))   # 后闪
+	_check(absf(pl3.dodge_spd - 560.0) < 0.01 and absf(pl3.dodge_t - 0.26) < 0.01,
+		"后闪慢而长（560/0.26s）")
+	_check(pl3.iframes >= 0.20, "后闪无敌帧更长（方向取舍）")
+	pl3.dodge_t = 0.0
+	pl3.iframes = 0.0
+	pl3._do_dodge(Vector2(0, 1))   # 侧闪
+	_check(absf(pl3.dodge_spd - 640.0) < 0.01 and absf(pl3.dodge_t - 0.20) < 0.01,
+		"侧闪中等（640/0.20s）")
+	pl3.dodge_t = 0.0
+	pl3.st = 0.0
+	var dt0: float = pl3.dodge_t
+	pl3._do_dodge(Vector2(1, 0))   # 体力不足拒绝
+	_check(absf(pl3.dodge_t - dt0) < 0.001 and pl3.st >= 0.0, "体力不足闪避拒绝")
+	# 回复：延迟结束后逐帧回（依赖真实物理帧，await 真实时间）
+	pl3.st_regen_t = 0.0
+	pl3.st = 50.0
+	await create_timer(0.3).timeout
+	_check(pl3.st > 50.0, "耐力延迟回复生效（%.1f → %.1f）" % [50.0, pl3.st])
+	pl3.st = pl3.max_st
+
+	# == 17. 弹反（Space：短窗口架势 + 连按惩罚 + 完美弹反重置） ==
+	print("== 17. 弹反 ==")
+	_check(ArpgBalance.data.has("parry"), "parry 段载入")
+	_check(InputMap.has_action("parry"), "parry 动作已注册（Space/LB）")
+	pl3.stun = 0.0
+	pl3.dash_t = 0.0
+	pl3.dodge_t = 0.0
+	pl3.parry_cd = 0.0
+	pl3.parry_mash_t = 0.0
+	pl3.parry_mash_n = 0
+	pl3.st = 100.0
+	pl3._do_parry()
+	_check(absf(pl3.parry_t - 0.24) < 0.01, "弹反窗口 0.24s")
+	_check(absf(pl3.st - 88.0) < 0.01, "弹反消耗耐力 12")
+	pl3._do_parry()   # 0.4s 内连按 → 窗口 ×0.6
+	_check(absf(pl3.parry_t - 0.24 * 0.6) < 0.01, "连按惩罚：第二次窗口缩小（%.3f）" % pl3.parry_t)
+	pl3._do_parry()
+	_check(absf(pl3.parry_t - 0.24 * 0.36) < 0.01, "连按惩罚：第三次接近归零（%.3f）" % pl3.parry_t)
+	pl3.parry_t = 0.0
+	pl3.parry_cd = 0.0
+	pl3.parry_mash_t = 0.0
+	pl3.parry_mash_n = 0
+	# 完美弹反：窗口前 45% 接敌 → 伤害无效 + 敌人硬直 + SP/体力返还 + 减压
+	var wi: int = main.world.mobs.spawn("wolf", main.player.cell + Vector2i(10, 0), false, false)
+	_check(wi >= 0, "弹反测试用狼已生成")
+	if wi >= 0:
+		pl3.hp = 100
+		pl3.iframes = 0.0
+		pl3.sp = 20
+		pl3.st = 100.0
+		main.threat.value = 50.0
+		pl3._do_parry()
+		pl3.take_damage(10, main.world.mobs.pos[wi])
+		_check(pl3.hp == 100, "完美弹反：伤害无效")
+		_check(main.world.mobs.hold_t[wi] > 0.0, "完美弹反：敌人硬直")
+		_check(pl3.sp > 20, "完美弹反：SP 返还")
+		_check(main.threat.value < 50.0, "完美弹反：减压")
+		_check(pl3.parry_mash_n == 0, "完美弹反：连按惩罚清零")
+		# 普通弹反：完美段（0.108s）之后接敌 → 仅抵消 + 小冷却
+		pl3.parry_t = 0.0
+		pl3.parry_cd = 0.0
+		pl3.parry_mash_t = 0.0
+		pl3.parry_mash_n = 0
+		pl3.st = 100.0
+		pl3.hp = 100
+		pl3._do_parry()
+		await create_timer(0.15).timeout   # 过完美窗，仍在架势窗内
+		if pl3.parry_t > 0.0:
+			pl3.take_damage(10, main.world.mobs.pos[wi])
+			_check(pl3.hp == 100, "普通弹反：伤害仍无效")
+			_check(pl3.parry_t == 0.0 and pl3.parry_cd > 0.0, "普通弹反：窗口消耗 + 小冷却")
+		else:
+			_check(true, "普通弹反时序偏移（跳过）")
+		# 空挥冷却：窗口自然过期 → 0.6s 冷却内按不出
+		pl3.parry_cd = 0.0
+		pl3.parry_mash_t = 0.0
+		pl3.parry_mash_n = 0
+		pl3.st = 100.0
+		pl3._do_parry()
+		await create_timer(0.3).timeout
+		_check(pl3.parry_cd > 0.0, "弹反空挥进入冷却")
+		pl3._do_parry()
+		_check(pl3.parry_t == 0.0, "冷却期弹反被拒")
+		pl3.parry_cd = 0.0
+		pl3.st = pl3.max_st
+	# stagger API 直查（boss 也吃硬直的通用入口）
+	var bi4: int = main.world.mobs.spawn("boss", main.player.cell + Vector2i(6, 0), false, true)
+	if bi4 >= 0:
+		_check(main.world.mobs.stagger_nearest(main.world.mobs.pos[bi4], 0.5, 100.0),
+			"stagger_nearest 命中 Boss")
+		_check(main.world.mobs.hold_t[bi4] > 0.0, "Boss 吃弹反硬直")
+	else:
+		_check(true, "Boss 模板未载入（跳过 stagger 直查）")
+
+	# == 18. 蓄力重击 + 药水前摇 ==
+	print("== 18. 蓄力重击与药水前摇 ==")
+	if main.possession != null:
+		main.possession.current_unit = main.player   # 第 7 节切换测试可能停在队友身上，切回主控
+	_check(ArpgBalance.data.has("heavy"), "heavy 段载入")
+	_check(float(ArpgBalance.ITEMS["potion"].get("windup", 0.0)) > 0.0, "药水前摇配置（0.35s）")
+	# 清场：防击杀连锁（升级回满 SP/HP 会污染后续断言）
+	for mi in range(main.world.mob_count()):
+		main.world.mobs.hp[mi] = 0
+	await create_timer(0.1).timeout
+	pl3.stun = 0.0
+	pl3.dead = false
+	pl3.atk_timer = 0.0
+	pl3.sp = pl3.max_sp
+	var m1: float = pl3._do_heavy()
+	_check(absf(m1 - 1.4 * 1.3) < 0.01, "SP 富余：强化重击 ×%.2f" % m1)
+	_check(pl3.sp < pl3.max_sp, "强化重击消耗 SP 12")
+	pl3.sp = 0
+	pl3.atk_timer = 0.0
+	var m2: float = pl3._do_heavy()
+	_check(absf(m2 - 1.4 * 0.77) < 0.01, "SP 不足：弱化重击 ×%.2f（仍可出招）" % m2)
+	# 按住攻击自动蓄力（按住类输入 action_press 可靠；just_pressed 才有帧序坑）
+	pl3.sp = pl3.max_sp
+	pl3.iframes = 999.0   # 测试期间免受击（防打断蓄力）
+	Input.action_press("attack")
+	await create_timer(0.55).timeout
+	Input.action_release("attack")
+	_check(pl3.atk_charge_fired and pl3.sp < pl3.max_sp, "按住 0.45s 自动出蓄力重击（强化档扣 SP）")
+	pl3.atk_hold_t = 0.0
+	pl3.atk_charge_fired = false
+	# 药水前摇：主控喝药延迟到账（被击杀则作废——喝药时机成为风险决策）
+	pl3.iframes = 999.0
+	pl3.burn_t = 0.0
+	main.rpg.inventory.add("potion", 1)
+	pl3.hp = 50
+	main.drink_potion()
+	_check(pl3.potion_t > 0.0, "喝药进入前摇")
+	_check(pl3.hp == 50, "前摇期间回血未到账")
+	await create_timer(0.45).timeout
+	_check(pl3.hp == 100, "前摇结束回血到账（50 → 100）")
+	pl3.iframes = 0.0
+	pl3.st = pl3.max_st
+	main.threat.reset()
+
 	if _failed:
 		quit(1)
 	else:
