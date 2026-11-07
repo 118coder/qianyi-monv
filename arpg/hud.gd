@@ -1264,8 +1264,16 @@ func _build_settle() -> void:
 	bh.add_theme_constant_override("separation", 12)
 	v.add_child(bh)
 	bh.add_child(_btn("回到标题", func(): back_to_title.emit()))
-	bh.add_child(_btn("进入店铺", func(): show_shop(), "primary"))
+	# 经营循环闭环：金币/装备/天数跨局保留（rpg_state），直接开启下一天的打捞
+	# （文本不带天数——_build_settle 在 _ready 期 rpg 还未 setup，天数点击后由开场日志呈现）
+	bh.add_child(_btn("继续经营 ▸ 下一局", func(): hide_settle_and_continue(), "primary"))
+	bh.add_child(_btn("进入店铺", func(): show_shop()))
 	bh.add_child(_btn("一键卖出战利品", func(): _sell_loot_from_settle()))
+
+
+func hide_settle_and_continue() -> void:
+	settle_root.visible = false
+	game.start_run(game.char_id)
 
 
 func _sell_loot_from_settle() -> void:
