@@ -1047,9 +1047,19 @@ smoke_arpg 断言数从 116 → **140**（本轮 +24）。
 - 验证：smoke PASS · autoplay PASS（50 杀 · 4 层 · Lv7）。
 - S 批（input-router）后台推送中；两批合流后 main 即含 P1-2 两步拆分 + 扑击家族。
 
-### 22.38 下一轮接续点（最新）
+### 22.39 ✅ U 批（定时轮 11）：P1-2 第三步——楼层组装独立
 
-1. T 批 + S 批推送合并（后台重试中，两个分支）。
-2. P1-2 第三步：楼层构建 → floor_builder.gd；hud 按屏拆。
-3. 方案 B 扩展：宝箱房/剧情房手搭贴片；店铺营业日。
-4. 美术域：死亡残留；扑击动画帧（现在共用走路帧，素材允许时加蹲伏帧）。
+- **`arpg/floor_builder.gd`（新）**：`ArpgFloorBuilder.build(main)` 三静态段（build：地牢来源决策+world 重建+
+  成长搬运+重绑 / _populate：怪·箱·商人·祭坛·楼梯铺排 / _finish：PLAY 收尾）。main.build_floor 收敛为一行转调。
+- main.gd **1118 → 963 行**（P1-2 三步累计 **-271 行**：economy / input_router / floor_builder）。
+- ⚠️ 踩坑 #5 复现：`CameraDirector` 是 main 的 preload 常量非全局类——floor_builder 顶部 preload 修复
+  （新拆分文件引用 main 的 preload 常量必须同样 preload）。
+- 验证：151 断言全绿 · autoplay **PASS（48 杀 · 打穿 5 层 Boss · Lv8）**。
+- **PR #19（扑击家族）+ #20（楼层拆分）均已合并**，main `d5853a4` 零积压。
+
+### 22.40 下一轮接续点（最新）
+
+1. P1-2 收尾：hud.gd（1600+ 行）按屏拆；main 剩余（输入处理外的流程钩子）。
+2. 方案 B 扩展：宝箱房/剧情房手搭贴片；店铺营业日（经营深化主体）。
+3. 美术域：死亡残留；扑击蹲伏帧。
+4. **实机走查**（手感清单）：献祭/台词/入队/大招/圣所/商人。
