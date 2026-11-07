@@ -311,6 +311,14 @@ func _run() -> void:
 	main.economy.settle()   # 走一遍结算（day+1 → daily 重置）
 	var dq2: Dictionary = main.rpg.quests["q_d1"]
 	_check(str(dq2["state"]) == "active" and int(dq2["progress"]) == 0, "日常委托次日刷新（done→active）")
+	# 店铺被动营业：上架商品随机售出（收益入金币、库存递减）
+	main.rpg.inventory.add("herb", 3)
+	var shop_h0: int = main.rpg.inventory.count("herb")
+	var shop_g0: int = main.rpg.gold
+	main.economy.settle()   # 再走一遍结算（含店铺营业）
+	var shop_h1: int = main.rpg.inventory.count("herb")
+	_check(shop_h1 <= shop_h0 and main.rpg.gold >= shop_g0 - 60,
+		"店铺营业售出链路（药草 %d→%d）" % [shop_h0, shop_h1])
 	main.rpg.gold = 500
 	main.rpg.inventory.add("orb")
 	_check(main.shop.sell_all_goods() >= 0, "一键卖出")

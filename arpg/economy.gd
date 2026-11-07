@@ -21,6 +21,30 @@ func settle() -> Dictionary:
 		rpg.gold -= paid
 		rpg.debt_paid += paid
 		rpg.debt -= paid
+	var rng: RandomNumberGenerator = main.rng
+	# ①.5 店铺被动营业：上架的战利品每天随机被顾客买走（露塞提娅「开店」的本质——
+	# 冒险时店里的东西会自己卖掉；售出按标价全额，与主动甩卖 0.6 折价形成风险收益差）
+	var sd: Dictionary = ArpgBalance.data.get("shop_day", {})
+	var shop_income := 0
+	var shop_n := 0
+	if float(sd.get("chance", 0)) > 0.0 and rng.randf() < float(sd["chance"]):
+		var goods: Array = []
+		for row in rpg.inventory.rows():
+			if str(row.get("kind", "")) == "misc" and int(row.get("value", 0)) > 0:
+				goods.append(row)
+		goods.shuffle()
+		for row in goods:
+			if shop_n >= int(sd.get("max_items", 4)):
+				break
+			if rng.randf() > 0.75:   # 每件 75% 成交率
+				continue
+			var price: int = int(float(row["value"]) * float(sd.get("price_ratio", 1.0)))
+			if rpg.inventory.remove(str(row["id"]), 1):
+				shop_income += price
+				shop_n += 1
+				main.hud.log("店铺售出 %s（+%dG）" % [str(row["name"]), price])
+		if shop_income > 0:
+			rpg.gold += shop_income
 	# ② 跨局成就统计（历史击杀/最深楼层/最高连杀，随存档走）
 	rpg.lifetime_kills += main.kills
 	rpg.best_floor = maxi(rpg.best_floor, main.floor_no)
