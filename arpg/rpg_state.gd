@@ -17,6 +17,7 @@ var lifetime_kills := 0        # 历史累计击杀
 var best_floor := 0            # 历史最深楼层
 var best_combo := 0            # 历史最高连杀
 var forge_level := {}          # item_id -> 强化等级（+N，商人铁砧；atk 加成见 equip_bonus）
+var market_mod := {}           # item_id -> 今日行情乘数（每日结算随机扰动 0.3~1.4，经营策略读盘）
 
 
 func setup() -> void:
@@ -155,7 +156,7 @@ func to_dict() -> Dictionary:
 	return {"gold": gold, "debt": debt, "debt_paid": debt_paid, "day": day, "inventory": inventory.to_dict(),
 		"equipped": equipped.duplicate(), "quests": quests.duplicate(true),
 		"lifetime_kills": lifetime_kills, "best_floor": best_floor, "best_combo": best_combo,
-		"forge_level": forge_level.duplicate()}
+		"forge_level": forge_level.duplicate(), "market_mod": market_mod.duplicate()}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -167,6 +168,7 @@ func from_dict(d: Dictionary) -> void:
 	best_floor = int(d.get("best_floor", 0))
 	best_combo = int(d.get("best_combo", 0))
 	forge_level = (d.get("forge_level", {}) as Dictionary).duplicate()
+	market_mod = (d.get("market_mod", {}) as Dictionary).duplicate()
 	inventory.from_dict(d.get("inventory", {}))
 	var eq: Dictionary = d.get("equipped", {})
 	for slot in equipped:

@@ -121,7 +121,7 @@ func refresh() -> void:
 	else:
 		var rows: Array = rpg.inventory.rows()
 		# 今日顾客偏好提示：按成交率乘数排序（经营策略的信息层——上架什么有讲究）
-		var prefs: Dictionary = ArpgBalance.data.get("shop_day", {}).get("preferences", {})
+		var prefs: Dictionary = rpg.market_mod if not rpg.market_mod.is_empty() 			else ArpgBalance.data.get("shop_day", {}).get("preferences", {})
 		if not prefs.is_empty():
 			var sorted_prefs: Array = prefs.keys()
 			sorted_prefs.sort_custom(func(a, b): return float(prefs[a]) > float(prefs[b]))

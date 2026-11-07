@@ -36,8 +36,8 @@ func settle() -> Dictionary:
 		for row in goods:
 			if shop_n >= int(sd.get("max_items", 4)):
 				break
-			# 顾客偏好加权：药水好卖、宝石难卖（上架什么有讲究——经营策略）
-			var pref: float = float(sd.get("preferences", {}).get(str(row["id"]), 1.0))
+			# 成交判定读「今日行情」（每日扰动后的动态值；无行情回落静态偏好）
+			var pref: float = float(rpg.market_mod.get(str(row["id"]), sd.get("preferences", {}).get(str(row["id"]), 1.0)))
 			if rng.randf() > 0.75 * pref:   # 基础 75% 成交率 × 品类偏好
 				continue
 			var price: int = int(float(row["value"]) * float(sd.get("price_ratio", 1.0)))
@@ -58,6 +58,10 @@ func settle() -> Dictionary:
 	var overdue := 0
 	if rent > 0:
 		rpg.day += 1
+		# 今日行情生成：每品类在静态偏好上随机扰动（0.3~1.4）——玩家每天读行情定上架策略
+		var prefs: Dictionary = ArpgBalance.data.get("shop_day", {}).get("preferences", {})
+		for iid in prefs:
+			rpg.market_mod[str(iid)] = clampf(float(prefs[iid]) + rng.randf_range(-0.25, 0.25), 0.3, 1.4)
 		# 日常委托刷新：daily 任务在新的一天重置（done/claimed → active），支撑第 2 天起的稳定收入线
 		for qid in rpg.quests:
 			var qd: Dictionary = rpg.quests[qid]
