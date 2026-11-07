@@ -265,6 +265,13 @@ static func defaults() -> Dictionary:
 			"arc_blend": 0.22,
 			"strafe_ratio": 0.5
 		},
+		"dodge": {
+			"cost": 25.0,
+			"forward": {"speed": 720.0, "time": 0.16, "iframes": 0.10},
+			"back": {"speed": 560.0, "time": 0.26, "iframes": 0.20},
+			"side": {"speed": 640.0, "time": 0.20, "iframes": 0.15},
+		},
+		"stamina": {"max": 100.0, "regen": 20.0, "regen_delay": 0.6},
 		"threat": {
 			"enabled": true, "start": 25.0, "max": 100.0,
 			"gain": {

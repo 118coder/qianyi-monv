@@ -18,6 +18,7 @@ var root: Control
 var play_hud: Control
 var hp_bar: ProgressBar
 var sp_bar: ProgressBar
+var st_bar: ProgressBar
 var xp_bar: ProgressBar
 var lv_label: Label
 var floor_label: Label
@@ -447,6 +448,8 @@ func _build_play_hud() -> void:
 	top_left.add_child(hp_bar)
 	sp_bar = _bar(Color(0.4, 0.62, 1.0), Vector2(230, 9))
 	top_left.add_child(sp_bar)
+	st_bar = _bar(Color(0.68, 0.9, 0.42), Vector2(230, 7))   # 耐力条（闪避/弹反消耗）
+	top_left.add_child(st_bar)
 	xp_bar = _bar(Color(0.95, 0.85, 0.35), Vector2(230, 5))
 	top_left.add_child(xp_bar)
 	lv_label = _label(13, Color(1, 1, 1, 0.9))
@@ -568,6 +571,7 @@ func set_gold(v: int) -> void:
 func update_bars(player: ArpgPlayer, bag_n: int, potion_n: int, floor_no: int, boss_floor: bool) -> void:
 	hp_bar.value = float(player.hp) / player.max_hp
 	sp_bar.value = float(player.sp) / player.max_sp
+	st_bar.value = float(player.st) / player.max_st
 	xp_bar.value = float(player.xp) / ArpgBalance.xp_need(player.level)
 	lv_label.text = "Lv %d    攻 %d    HP %d/%d" % [player.level, player.atk, player.hp, player.max_hp]
 	if debt_label != null and game != null and game.rpg != null:

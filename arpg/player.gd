@@ -70,6 +70,14 @@ var dash_t := 0.0
 var dash_dir := Vector2.DOWN
 var dash_hit := {}
 var dash_ghost_t := 0.0
+# —— 耐力 / 方向闪避（影之刃方案批 3：Shift 闪避，前快短/后慢长/侧中等）——
+var max_st := 100.0
+var st := 100.0
+var st_regen_t := 0.0           # 体力回复延迟（消耗动作后 0.6s 才开始回）
+var dodge_t := 0.0
+var dodge_dir := Vector2.DOWN
+var dodge_spd := 0.0
+var dodge_ghost_t := 0.0
 var lunge := Vector2.ZERO       # 攻击前冲冲量
 var knock := Vector2.ZERO
 var _move_vel := Vector2.ZERO   # 平滑移动分量（不含击退/前冲）
@@ -115,6 +123,8 @@ func setup(id: String, m: Node, w: Node) -> void:
 	atk = tpl["atk"]
 	spd = float(tpl["spd"])
 	atk_range = float(tpl["atk_range"])
+	max_st = float(ArpgBalance.data.get("stamina", {}).get("max", 100.0))
+	st = max_st
 
 	command_queue = ArpgCommandQueue.new()
 	command_queue.push("follow")
@@ -152,6 +162,11 @@ func _physics_process(delta: float) -> void:
 	stun = maxf(0.0, stun - delta)
 	slow_t = maxf(0.0, slow_t - delta)
 	hurt_amp_t = maxf(0.0, hurt_amp_t - delta)
+	# 耐力回复：消耗动作后延迟 regen_delay 才开始回（防「消耗-瞬间回满」刷循环）
+	if st_regen_t > 0.0:
+		st_regen_t -= delta
+	else:
+		st = minf(max_st, st + float(ArpgBalance.data.get("stamina", {}).get("regen", 20.0)) * delta)
 	# 燃烧 DoT：每秒灼烧（绕护甲的持续伤害；触发死亡流程），0.6s 一次火色火花提示
 	if burn_t > 0.0:
 		burn_t = maxf(0.0, burn_t - delta)
@@ -214,6 +229,15 @@ func _physics_process(delta: float) -> void:
 		velocity = dash_dir * DASH_SPEED
 		_move_vel = dash_dir * spd * 0.5   # 冲刺结束保留部分动量，衔接更顺
 		_dash_hits()
+	elif dodge_t > 0.0:
+		# 方向闪避：匀速位移 + 绿白残影（无敌帧走 iframes，take_damage 自动豁免）
+		dodge_t -= delta
+		dodge_ghost_t -= delta
+		if dodge_ghost_t <= 0.0:
+			dodge_ghost_t = 0.035
+			world.spawn_ghost(sprite, position + Vector2(0, -6), Color(0.85, 1.0, 0.9, 0.5))
+		velocity = dodge_dir * dodge_spd
+		_move_vel = dodge_dir * spd * 0.5
 	elif stun > 0.0:
 		velocity = knock
 		_move_vel = Vector2.ZERO
@@ -235,6 +259,8 @@ func _physics_process(delta: float) -> void:
 	if stun <= 0.0 and possessed:
 		if Input.is_action_just_pressed("attack") and atk_timer <= 0.0:
 			_do_attack()
+		if Input.is_action_just_pressed("dodge"):
+			_do_dodge(dir)
 		if Input.is_action_just_pressed("skill"):
 			use_skill(0)
 		if Input.is_action_just_pressed("skill2"):
@@ -455,6 +481,39 @@ func _dash_hits() -> void:
 			continue
 		dash_hit[i] = true
 		world.damage_mob(i, int(eff_atk() * dash_dmg_mult), position, 260.0, true)
+
+
+## 方向闪避（Shift）：前闪快而短 / 后闪慢而长且无敌帧更长 / 侧闪中等——方向取舍。
+## 无敌帧复用 iframes（take_damage 自动豁免）；残影复用 world.spawn_ghost；
+## 消耗耐力（不足拒绝）；成功闪避减压（threat.on_dodge，影之刃方案「闪避成功扣分」的映射）。
+func _do_dodge(move_dir: Vector2) -> void:
+	if dead or dodge_t > 0.0 or dash_t > 0.0 or stun > 0.0:
+		return
+	var dcfg: Dictionary = ArpgBalance.data.get("dodge", {})
+	var cost := float(dcfg.get("cost", 25.0))
+	if st < cost:
+		world.spawn_popup("体力不足", position, Color(0.75, 0.75, 0.75))
+		return
+	# 方向分类：移动输入与朝向的点积 → 前/后/侧（无输入默认前闪）
+	var d := move_dir.normalized() if move_dir.length_squared() > 0.001 else facing
+	var dotv := d.dot(facing)
+	var bname := "side"
+	if dotv > 0.5:
+		bname = "forward"
+	elif dotv < -0.5:
+		bname = "back"
+	var bcfg: Dictionary = dcfg.get(bname, {})
+	dodge_spd = float(bcfg.get("speed", 640.0))
+	dodge_t = float(bcfg.get("time", 0.20))
+	iframes = maxf(iframes, float(bcfg.get("iframes", 0.15)))
+	dodge_dir = d
+	dodge_ghost_t = 0.0
+	st -= cost
+	st_regen_t = float(ArpgBalance.data.get("stamina", {}).get("regen_delay", 0.6))
+	pop(0.9, 1.1)
+	main.play_sfx("attack", -12.0)
+	if main.threat != null:
+		main.threat.on_dodge()
 
 
 # ———————— 受击 / 成长 ————————

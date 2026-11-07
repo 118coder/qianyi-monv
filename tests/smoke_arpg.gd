@@ -707,6 +707,46 @@ func _run() -> void:
 	else:
 		_check(true, "Boss 模板未载入（跳过招式池链路）")
 
+	# == 16. 耐力与方向闪避（Shift：前快短/后慢长/侧中等） ==
+	print("== 16. 耐力与方向闪避 ==")
+	_check(ArpgBalance.data.has("dodge") and ArpgBalance.data.has("stamina"), "dodge/stamina 段载入")
+	_check(InputMap.has_action("dodge"), "dodge 动作已注册（Shift/RB）")
+	var pl3: ArpgPlayer = main.player
+	_check(absf(pl3.max_st - 100.0) < 0.01 and absf(pl3.st - 100.0) < 0.01, "耐力初始满值")
+	pl3.facing = Vector2.RIGHT
+	pl3.dodge_t = 0.0
+	pl3.dash_t = 0.0
+	pl3.stun = 0.0
+	pl3.iframes = 0.0
+	main.threat.value = 50.0
+	pl3._do_dodge(Vector2(1, 0))   # 前闪（与朝向同向）
+	_check(absf(pl3.dodge_spd - 720.0) < 0.01 and absf(pl3.dodge_t - 0.16) < 0.01, "前闪快而短（720/0.16s）")
+	_check(pl3.iframes >= 0.10, "前闪无敌帧生效")
+	_check(absf(pl3.st - 75.0) < 0.01, "闪避消耗耐力 25")
+	_check(main.threat.value < 50.0, "成功闪避减压（threat.on_dodge）")
+	pl3.dodge_t = 0.0
+	pl3.iframes = 0.0
+	pl3._do_dodge(Vector2(-1, 0))   # 后闪
+	_check(absf(pl3.dodge_spd - 560.0) < 0.01 and absf(pl3.dodge_t - 0.26) < 0.01,
+		"后闪慢而长（560/0.26s）")
+	_check(pl3.iframes >= 0.20, "后闪无敌帧更长（方向取舍）")
+	pl3.dodge_t = 0.0
+	pl3.iframes = 0.0
+	pl3._do_dodge(Vector2(0, 1))   # 侧闪
+	_check(absf(pl3.dodge_spd - 640.0) < 0.01 and absf(pl3.dodge_t - 0.20) < 0.01,
+		"侧闪中等（640/0.20s）")
+	pl3.dodge_t = 0.0
+	pl3.st = 0.0
+	var dt0: float = pl3.dodge_t
+	pl3._do_dodge(Vector2(1, 0))   # 体力不足拒绝
+	_check(absf(pl3.dodge_t - dt0) < 0.001 and pl3.st >= 0.0, "体力不足闪避拒绝")
+	# 回复：延迟结束后逐帧回（依赖真实物理帧，await 真实时间）
+	pl3.st_regen_t = 0.0
+	pl3.st = 50.0
+	await create_timer(0.3).timeout
+	_check(pl3.st > 50.0, "耐力延迟回复生效（%.1f → %.1f）" % [50.0, pl3.st])
+	pl3.st = pl3.max_st
+
 	if _failed:
 		quit(1)
 	else:

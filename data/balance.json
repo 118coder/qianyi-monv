@@ -983,6 +983,29 @@
    "gems": 0.5
   }
  },
+ "dodge": {
+  "back": {
+   "iframes": 0.2,
+   "speed": 560.0,
+   "time": 0.26
+  },
+  "cost": 25.0,
+  "forward": {
+   "iframes": 0.1,
+   "speed": 720.0,
+   "time": 0.16
+  },
+  "side": {
+   "iframes": 0.15,
+   "speed": 640.0,
+   "time": 0.2
+  }
+ },
+ "stamina": {
+  "max": 100.0,
+  "regen": 20.0,
+  "regen_delay": 0.6
+ },
  "threat": {
   "enabled": true,
   "start": 25.0,
