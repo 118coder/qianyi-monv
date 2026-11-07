@@ -683,12 +683,13 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 
 
 func _melee_move(i: int, to_p: Vector2, dist: float) -> void:
-	# 狼扑击：追击带内且冷却好 → 蓄势突进（lunge 位移技能，贴脸后走正常咬人判定）
+	# 扑击（狼/骑士/imp 等 melee 怪通用）：追击带内且冷却好 → 蓄势突进（贴脸后走正常咬人判定）
 	var ti := tpl[i]
 	if tpl_pounce[ti] == 1 and special_t[i] <= 0.0 and dist > atk_range[i]:
 		var pr: PackedInt32Array = tpl_pounce_range[ti]
 		if dist >= pr[0] and dist <= pr[1]:
-			special_t[i] = float(ArpgBalance.ENEMIES.get("wolf", {}).get("pounce_cd", 3.5))
+			# cd 从该怪自身模板读（此前写死 wolf 的，骑士/imp 配了也会用错值）
+			special_t[i] = float(ArpgBalance.ENEMIES.get(str(tpl_name[ti]), {}).get("pounce_cd", 3.5))
 			lunge[i] = to_p.normalized() * tpl_pounce_speed[ti]
 			# mob_system 的 _physics_process 在主线程，popup/音效可直接调（不必走事件队列）
 			world.spawn_popup("!", pos[i] + Vector2(0, -26), Color(1.0, 0.4, 0.3), 22)

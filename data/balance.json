@@ -293,7 +293,14 @@
     192
    ],
    "windup": 0.35,
-   "xp": 4
+   "xp": 4,
+   "pounce": true,
+   "pounce_range": [
+    80,
+    200
+   ],
+   "pounce_speed": 700,
+   "pounce_cd": 2.5
   },
   "knight": {
    "atk": 13,
@@ -310,7 +317,14 @@
     0
    ],
    "windup": 0.55,
-   "xp": 14
+   "xp": 14,
+   "pounce": true,
+   "pounce_range": [
+    120,
+    300
+   ],
+   "pounce_speed": 500,
+   "pounce_cd": 5.0
   },
   "orc": {
    "atk": 11,
