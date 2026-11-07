@@ -895,6 +895,10 @@ func _settle(win: bool, title: String, flavor: String) -> void:
 	# 经济账（economy.gd）：还债 → 跨局统计 → 日租（付不起滚债）。P1-2 从本函数拆出。
 	var eco: Dictionary = economy.settle()
 	var paid: int = int(eco["paid"])
+	# 营业日报：当日店铺售出明细并入商品清单（经营感知聚合）
+	for sl in eco.get("shop_lines", []):
+		goods_text += "
+%s" % str(sl)
 	# 还债结局反馈：清零时结算标题变金色（露塞提娅循环的正反馈时刻）
 	var title_col := Color(1, 0.95, 0.75) if win else Color(1, 0.55, 0.5)
 	if rpg.debt <= 0:
