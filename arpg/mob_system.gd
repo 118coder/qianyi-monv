@@ -1133,7 +1133,15 @@ func _draw() -> void:
 			col = Color(1, 0.55, 0.5) if elite[i] == 0 else Color(1.0, 0.85, 0.45)
 		elif elite[i] == 1:
 			col = ArpgBalance.ELITE_TINT
-		var rect := Rect2(pos[i] + Vector2(-24.0, -29.0) * s, Vector2(48, 48) * s)
+		# 受击挤压（squash & stretch）：flash 前半段横宽纵扁，命中瞬间的形体反馈
+		var sq_x := 1.0
+		var sq_y := 1.0
+		if flash_t[i] > 0.075:
+			sq_x = 1.18
+			sq_y = 0.82
+		var rect := Rect2(
+			pos[i] + Vector2(-24.0 * s * sq_x, -29.0 * s * sq_y),
+			Vector2(48.0 * s * sq_x, 48.0 * s * sq_y))
 		draw_texture_rect_region(_sheet, rect,
 			Rect2(blk.x + f * 48, blk.y + facing[i] * 48, 48, 48), col)
 	# 血条（受伤且靠近玩家的，封顶 60 条）
