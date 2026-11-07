@@ -111,6 +111,7 @@ const EV_BITE := 0
 const EV_SHOOT := 1
 const EV_SPECIAL := 2
 const EV_AFFIX := 3
+const EV_ENRAGE := 4
 
 
 func setup(m: Node, w: Node, d: ArpgDungeon) -> void:
@@ -661,6 +662,8 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 			if enraged[i] == 0 and hp[i] < max_hp[i] * 0.4:
 				enraged[i] = 1
 				spd[i] = tpl_spd[tpl[i]] * 1.35
+				# 二阶段开场：横幅警告 + 召唤护主小鬼（一次性，走主线程事件队列）
+				ev.append([EV_ENRAGE, i])
 			if special_t[i] <= 0.0:
 				special_t[i] = 2.6 if enraged[i] == 1 else 3.4
 				ev.append([EV_SPECIAL, i])
@@ -949,13 +952,34 @@ func _drain_events() -> void:
 					var i3: int = e[1]
 					if not is_alive(i3):
 						break
-					for k in 10:
-						var ang := TAU * k / 10.0 + float(k % 3) * 0.2
-						world.spawn_projectile(pos[i3], Vector2.RIGHT.rotated(ang), 215.0,
-							atk[i3] - 4, "enemy", Color(1.0, 0.45, 0.2), "bullet")
-					world.spawn_nova(pos[i3], Color(1.0, 0.4, 0.2))
+					# 二阶段弹幕增强：向数/弹速按 balance.boss.phase2 配置（狂暴读感质变）
+					var bcfg: Dictionary = ArpgBalance.data.get("boss", {})
+					var n_ray: int = int(bcfg.get("phase2_nova", 16)) if enraged[i3] == 1 else 10
+					var ray_spd: float = float(bcfg.get("phase2_bullet_spd", 275.0)) if enraged[i3] == 1 else 215.0
+					for k in n_ray:
+						var ang := TAU * k / float(n_ray) + float(k % 3) * 0.2
+						world.spawn_projectile(pos[i3], Vector2.RIGHT.rotated(ang), ray_spd,
+							atk[i3] - 4, "enemy", Color(1.0, 0.45, 0.2) if enraged[i3] == 0 else Color(1.0, 0.3, 0.15), "bullet")
+					world.spawn_nova(pos[i3], Color(1.0, 0.4, 0.2) if enraged[i3] == 0 else Color(1.0, 0.25, 0.1))
 					main.add_shake(0.28)
 					main.rumble(0.25, 0.5, 0.2)
+				EV_ENRAGE:
+					# 二阶段开场：横幅 + 召唤护主小鬼（数量/模板走 balance，Demo 默认 imp×2）
+					var i5: int = e[1]
+					if not is_alive(i5):
+						break
+					var ecfg: Dictionary = ArpgBalance.data.get("boss", {})
+					main.hud.show_banner(str(ecfg.get("phase2_banner", "魔王狂暴了！")), Color(0.75, 0.15, 0.15))
+					var n_sum: int = int(ecfg.get("phase2_summon", 2))
+					var anchor: Vector2 = pos[i5]
+					for s in n_sum:
+						var cell: Vector2i = Vector2i((anchor / float(ArpgData.TILE)).floor()) + Vector2i(1 + s, (1 if s % 2 == 0 else -1))
+						if not main.dungeon.is_floor(cell):
+							cell = main.dungeon.random_cell_in(main.dungeon.rooms[0])
+						world.spawn_mob(str(ecfg.get("phase2_summon_tpl", "imp")), cell, false, false)
+						world.spawn_nova(ArpgDungeon.cell_to_pos(cell), Color(1.0, 0.35, 0.2))
+					main.add_shake(0.4)
+					main.hit_stop(0.12, 0.1)
 				EV_AFFIX:
 					var i4: int = e[1]
 					if not is_alive(i4):

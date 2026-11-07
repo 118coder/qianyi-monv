@@ -47,7 +47,12 @@
    192
   ],
   "windup": 0.5,
-  "xp": 90
+  "xp": 90,
+  "phase2_nova": 16,
+  "phase2_bullet_spd": 275.0,
+  "phase2_summon": 2,
+  "phase2_summon_tpl": "imp",
+  "phase2_banner": "魔王狂暴了！"
  },
  "camera": {
   "base_zoom": 1.7,

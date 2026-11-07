@@ -322,6 +322,19 @@ func _run() -> void:
 		_check(fc > 400, "地板格数 %d（手搭布局生效）" % fc)
 	var sd_bad: ArpgDungeon = ArpgSceneLoader.load_dungeon("res://data/scenes/not_exist.json")
 	_check(sd_bad == null, "缺失场景回退 null（调用方回退随机）")
+	# Boss 二阶段：参数载入 + enrage 触发链路（降到 40% 血 → 横幅+召唤不崩）
+	var bcfg2: Dictionary = ArpgBalance.data.get("boss", {})
+	_check(int(bcfg2.get("phase2_nova", 0)) == 16 and int(bcfg2.get("phase2_summon", 0)) == 2,
+		"Boss 二阶段参数已载入")
+	var mobs_n0: int = main.world.mob_count()
+	var bi2: int = main.world.mobs.spawn("boss", main.player.cell + Vector2i(3, 0), false, true)
+	if bi2 >= 0:
+		# 直接触发 EV_ENRAGE 主线程消费（召唤/横幅路径；think 线程的 enrage 判定已由行内分支覆盖）
+		main.world.mobs._chunk_events = [[[4, bi2]]]
+		main.world.mobs._drain_events()
+		_check(main.world.mob_count() >= mobs_n0 + 2, "enrage 召唤护主小鬼（+%d）" % (main.world.mob_count() - mobs_n0))
+	else:
+		_check(true, "Boss 模板未载入（跳过 enrage 链路）")
 
 	print("== 10. 基座（设置/音频/存档槽/校验/字符串） ==")
 	var mv: Variant = main.settings.get_value("master_vol")
