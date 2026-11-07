@@ -32,6 +32,9 @@ var tpl_cool := PackedFloat32Array()
 var tpl_behavior := PackedByteArray()      # 0 melee 1 ranged 2 boss
 var tpl_block := PackedVector2Array()      # 角色块左上角
 var tpl_scale := PackedFloat32Array()
+var tpl_pounce := PackedByteArray()        # 1 = 会扑击（狼类：追击带内蓄力突进）
+var tpl_pounce_range := []                 # [近限, 远限]（格内距离 px）
+var tpl_pounce_speed := PackedFloat32Array()
 var tpl_count := 0
 
 # —— 实体 SoA ——
@@ -172,6 +175,10 @@ func _push_tpl(id: String, t: Dictionary, is_boss: bool) -> void:
 	tpl_behavior.append(2 if is_boss else (1 if t["behavior"] == "ranged" else 0))
 	tpl_block.append(Vector2(t["sprite"][1], t["sprite"][2]))
 	tpl_scale.append(float(t.get("scale", 1.0)))
+	tpl_pounce.append(1 if bool(t.get("pounce", false)) else 0)
+	tpl_pounce_range.append(PackedInt32Array([
+		int(t.get("pounce_range", [90, 280])[0]), int(t.get("pounce_range", [90, 280])[1])]))
+	tpl_pounce_speed.append(float(t.get("pounce_speed", 620.0)))
 
 
 # ———————— 生成 / 查询（主线程） ————————
@@ -676,6 +683,16 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 
 
 func _melee_move(i: int, to_p: Vector2, dist: float) -> void:
+	# 狼扑击：追击带内且冷却好 → 蓄势突进（lunge 位移技能，贴脸后走正常咬人判定）
+	var ti := tpl[i]
+	if tpl_pounce[ti] == 1 and special_t[i] <= 0.0 and dist > atk_range[i]:
+		var pr: PackedInt32Array = tpl_pounce_range[ti]
+		if dist >= pr[0] and dist <= pr[1]:
+			special_t[i] = float(ArpgBalance.ENEMIES.get("wolf", {}).get("pounce_cd", 3.5))
+			lunge[i] = to_p.normalized() * tpl_pounce_speed[ti]
+			# mob_system 的 _physics_process 在主线程，popup/音效可直接调（不必走事件队列）
+			world.spawn_popup("!", pos[i] + Vector2(0, -26), Color(1.0, 0.4, 0.3), 22)
+			main.play_sfx("attack", -8.0)
 	if dist > atk_range[i]:
 		# 包抄弧：近距时每怪认领一个方位槽绕到侧翼，怪群成弧围攻而不是叠柱
 		# （方位槽每怪恒定 → 几何量按 i 预算缓存，热循环里不再 is_floor/rotate）
@@ -1067,6 +1084,9 @@ func apply_balance() -> void:
 	tpl_behavior.clear()
 	tpl_block.clear()
 	tpl_scale.clear()
+	tpl_pounce.clear()
+	tpl_pounce_range.clear()
+	tpl_pounce_speed.clear()
 	for tpl_id in ArpgBalance.ENEMIES:
 		_push_tpl(tpl_id, ArpgBalance.ENEMIES[tpl_id], false)
 	_push_tpl("boss", ArpgBalance.BOSS, true)
