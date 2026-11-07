@@ -128,6 +128,7 @@ var possession: ArpgPossessionManager
 var arbiter: ArpgPickupArbiter
 var party_root: Node2D
 var _friends_n := -1          # --friends=N 覆盖（-1 = 用配置默认）
+var scene_name := ""          # --scene=scene001：手搭场景试玩模式（P1-1 方案 C）
 var _want_apc := false        # --apc 调试招募
 var _squad_cmd_i := 0
 var player_combat_t := 0.0
@@ -182,6 +183,8 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--friends="):
 			_friends_n = clampi(int(a.split("=")[1]), 0, 64)
+		elif a.begins_with("--scene="):
+			scene_name = a.split("=")[1]
 		elif a == "--apc":
 			_want_apc = true
 	# 队友节点容器（挂 main 下：换层不销毁；z=5 保证在世界地板/敌群之上可见）
@@ -397,6 +400,15 @@ func build_floor() -> void:
 	dungeon = ArpgDungeon.new()
 	if _stress_n > 0:
 		dungeon.generate_arena()
+	elif scene_name != "":
+		# P1-1 方案 C：手搭场景试玩模式（--scene=scene001）；加载失败回退随机
+		var sd: ArpgDungeon = ArpgSceneLoader.load_dungeon("res://data/scenes/%s.json" % scene_name)
+		if sd != null:
+			dungeon = sd
+		else:
+			push_warning("场景 %s 加载失败，回退随机生成" % scene_name)
+			dungeon.generate(floor_no, dungeon_seed + floor_no * 7919 if dungeon_seed != 0 else -1,
+				maxi(2, ArpgBalance.max_footprint()))
 	else:
 		# 走廊宽度下限 = 全场最大实体占几格（大角色进得去，不靠玩家撞墙才发现）
 		dungeon.generate(floor_no, dungeon_seed + floor_no * 7919 if dungeon_seed != 0 else -1,

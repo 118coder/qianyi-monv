@@ -303,6 +303,22 @@ func _run() -> void:
 	_check(main.rpg.gold == g_snap, "金币往返一致")
 	_check(main.rpg.lifetime_kills == 77 and main.rpg.best_floor == 4, "跨局成就统计随存档往返")
 
+	# P1-1 方案 C：手搭场景 → ArpgDungeon 转换层（布局/起点/楼梯/可走）
+	var sd: ArpgDungeon = ArpgSceneLoader.load_dungeon("res://data/scenes/scene001.json")
+	_check(sd != null and sd.w == 40 and sd.h == 30, "场景加载（40×30）")
+	if sd != null:
+		_check(sd.rooms.size() >= 1 and sd.rooms[0].get_area() >= 400, "场景房间包围盒（%d）" % sd.rooms[0].get_area())
+		_check(sd.is_floor(sd.start_cell), "起点在地板上")
+		_check(sd.is_floor(sd.stair_cell) and sd.stair_cell != sd.start_cell, "楼梯在最远处（%s）" % sd.stair_cell)
+		var fc: int = 0
+		for x in sd.w:
+			for y in sd.h:
+				if sd.grid[x][y] == ArpgDungeon.FLOOR:
+					fc += 1
+		_check(fc > 400, "地板格数 %d（手搭布局生效）" % fc)
+	var sd_bad: ArpgDungeon = ArpgSceneLoader.load_dungeon("res://data/scenes/not_exist.json")
+	_check(sd_bad == null, "缺失场景回退 null（调用方回退随机）")
+
 	print("== 10. 基座（设置/音频/存档槽/校验/字符串） ==")
 	var mv: Variant = main.settings.get_value("master_vol")
 	main.settings.set_value("master_vol", 0.5)
