@@ -370,6 +370,21 @@ func refresh_shop() -> void:
 						game.hud.log(err)
 					refresh_shop()]], C_TEXT if can else C_TEXT_DIM, not can)
 			shop_list.add_child(row)
+	elif shop_tab == "forge":
+		# 铁砧：已拥有（背包+已穿）的装备强化——金币的第二出口，与还债的抉择张力
+		var seen := {}
+		var eq_table: Dictionary = ArpgBalance.data.get("equipment", {})
+		for slot in rpg.equipped:
+			var eid: String = str(rpg.equipped[slot])
+			if eid != "" and eq_table.has(eid) and not seen.has(eid):
+				seen[eid] = true
+				shop_list.add_child(_forge_row(rpg, eid))
+		for r2 in rpg.inventory.rows():
+			if str(r2.get("kind", "")) == "equip" and eq_table.has(str(r2["id"])) and not seen.has(str(r2["id"])):
+				seen[str(r2["id"])] = true
+				shop_list.add_child(_forge_row(rpg, str(r2["id"])))
+		if seen.is_empty():
+			shop_list.add_child(_label(13, C_TEXT_DIM, "（还没有装备——先去商店买一件或从地牢打捞）"))
 	else:
 		var rows: Array = rpg.inventory.rows()
 		if rows.is_empty():
@@ -384,6 +399,32 @@ func refresh_shop() -> void:
 	shop_list.add_child(_label(11, C_TEXT_DIM, " "))
 	shop_list.add_child(_label(11, C_TEXT_DIM, "打捞提示：战利品在结算时自动折价还债，背包不留也行。"))
 	_refresh_shop_tabs()
+
+
+## 铁砧行：装备名 +N / 下级费用 / 强化按钮（金币不足置灰）
+func _forge_row(rpg, item_id: String) -> Control:
+	var eq: Dictionary = ArpgBalance.data.get("equipment", {}).get(item_id, {})
+	var cur: int = int(rpg.forge_level.get(item_id, 0))
+	var at_max: bool = cur >= int(ArpgBalance.data.get("forge", {}).get("max_plus", 3))
+	var cost: int = rpg.forge_cost(item_id)
+	var can: bool = not at_max and rpg.gold >= cost
+	var plus_txt := " +%d" % cur if cur > 0 else ""
+	var next_txt := " —— %dG" % cost if not at_max else "（已至上限）"
+	var row := _menu_row("%s%s —— 攻+%d%s" % [eq.get("name", item_id), plus_txt,
+		int(eq.get("atk", 0)) + cur * int(ArpgBalance.data.get("forge", {}).get("atk_per", 2)), next_txt],
+		[["强化", func():
+			var err: String = rpg.forge_item(item_id)
+			if err != "":
+				game.hud.log(err)
+			else:
+				game.hud.log("%s 强化成功，当前 +%d" % [eq.get("name", item_id), int(rpg.forge_level.get(item_id, 0))])
+				main_play_sfx()
+			refresh_shop()]], C_TEXT if can else C_TEXT_DIM, not can)
+	return row
+
+
+func main_play_sfx() -> void:
+	game.play_sfx("cursor")
 
 
 ## 买入/卖出页签选中态：当前页高亮（视觉走查反馈：两页签看不出差别）
@@ -615,7 +656,7 @@ func _build_shop_ui() -> void:
 	tabs.add_theme_constant_override("separation", 6)
 	v.add_child(tabs)
 	shop_tab_nodes = []
-	for pair in [["买入", "buy"], ["卖出", "sell"]]:
+	for pair in [["买入", "buy"], ["卖出", "sell"], ["强化", "forge"]]:
 		var b := _tab_btn(pair[0], pair[1] == "buy")
 		b.set_meta("tab", pair[1])
 		b.pressed.connect(func():
