@@ -54,7 +54,7 @@ var tpl := PackedInt32Array()
 var elite := PackedByteArray()
 var affix := PackedByteArray()          # 0=无 1=迅捷 2=坚韧 3=嗜血 4=临终爆炸（精英专属词缀）
 var affix_seen := PackedByteArray()     # 遭遇播报去重（LOS 首次发现时弹词缀名）
-const AFFIX_IDS := {"swift": 1, "tough": 2, "vampiric": 3, "burst": 4, "frost": 5}
+const AFFIX_IDS := {"swift": 1, "tough": 2, "vampiric": 3, "burst": 4, "frost": 5, "brittle": 6}
 var boss := PackedByteArray()
 var aggro := PackedByteArray()
 var alive := PackedByteArray()
@@ -963,6 +963,10 @@ func _drain_events() -> void:
 						elif affix[i] == int(AFFIX_IDS.get("frost", 5)) and t_i == 0 and world.player != null:
 							world.player.slow_t = float(ArpgBalance.data.get("affixes", {}).get("frost", {}).get("slow", 1.5))
 							world.spawn_popup("冻结！", world.player.position + Vector2(0, -40), Color(0.55, 0.8, 1.0), 18)
+						# 易伤词缀：命中后玩家受伤 +30%（3s）
+						elif affix[i] == int(AFFIX_IDS.get("brittle", 6)) and t_i == 0 and world.player != null:
+							world.player.hurt_amp_t = float(ArpgBalance.data.get("affixes", {}).get("brittle", {}).get("amp", 3.0))
+							world.spawn_popup("易伤！", world.player.position + Vector2(0, -40), Color(1.0, 0.6, 0.3), 18)
 				EV_SHOOT:
 					var i2: int = e[1]
 					if not is_alive(i2):
