@@ -36,7 +36,9 @@ func settle() -> Dictionary:
 		for row in goods:
 			if shop_n >= int(sd.get("max_items", 4)):
 				break
-			if rng.randf() > 0.75:   # 每件 75% 成交率
+			# 顾客偏好加权：药水好卖、宝石难卖（上架什么有讲究——经营策略）
+			var pref: float = float(sd.get("preferences", {}).get(str(row["id"]), 1.0))
+			if rng.randf() > 0.75 * pref:   # 基础 75% 成交率 × 品类偏好
 				continue
 			var price: int = int(float(row["value"]) * float(sd.get("price_ratio", 1.0)))
 			if rpg.inventory.remove(str(row["id"]), 1):

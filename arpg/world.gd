@@ -378,13 +378,22 @@ func spawn_hit_spark(pos: Vector2, col: Color) -> void:
 
 ## 死亡消散：燃尽序列帧加速播放（原序列 3.6 秒太长，压到 1.2 秒左右）
 ## 死亡残留：暗色焦痕淡出 2.4s（战场记忆感——走过的地方能看到打过仗）
-func spawn_death_mark(pos: Vector2) -> void:
+func spawn_death_mark(pos: Vector2, tier: int = 0) -> void:
 	_fx_guard()
 	var m := Sprite2D.new()
 	m.texture = preload("res://assets/fx/Particle100.png") if ResourceLoader.exists("res://assets/fx/Particle100.png") else null
 	m.position = pos
-	m.modulate = Color(0.12, 0.1, 0.14, 0.5)
-	m.scale = Vector2(0.9, 0.9)
+	# 残留变体：普通暗痕 / 精英金痕 / Boss 紫痕（战场记忆的等级语言）
+	var col := Color(0.12, 0.1, 0.14, 0.5)
+	var scl := 0.9
+	if tier == 1:
+		col = Color(0.35, 0.28, 0.1, 0.55)
+		scl = 1.1
+	elif tier >= 2:
+		col = Color(0.25, 0.12, 0.32, 0.6)
+		scl = 1.5
+	m.modulate = col
+	m.scale = Vector2(scl, scl)
 	m.z_index = 3
 	fx_root.add_child(m)
 	var tw := m.create_tween()
