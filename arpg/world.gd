@@ -64,10 +64,19 @@ func build(d: ArpgDungeon, m: Node) -> void:
 func _draw() -> void:
 	if dungeon == null:
 		return
+	var has_scene_tex: bool = dungeon.tileset_tex != null \
+		and dungeon.tile_ids.size() >= dungeon.w * dungeon.h
 	for x in dungeon.w:
 		for y in dungeon.h:
 			var r := Rect2(x * TILE, y * TILE, TILE, TILE)
-			if dungeon.grid[x][y] == ArpgDungeon.FLOOR:
+			if has_scene_tex and dungeon.tile_ids[y * dungeon.w + x] >= 0:
+				# 手搭场景图块：索引 → 图块集行列 → 区域绘制（默认墙格不受影响）
+				var t: int = dungeon.tile_ids[y * dungeon.w + x]
+				var tcol: int = t % maxi(1, dungeon.tileset_cols)
+				var trow: int = t / maxi(1, dungeon.tileset_cols)
+				draw_texture_rect_region(dungeon.tileset_tex, r,
+					Rect2(tcol * dungeon.tile_px, trow * dungeon.tile_px, dungeon.tile_px, dungeon.tile_px))
+			elif dungeon.grid[x][y] == ArpgDungeon.FLOOR:
 				draw_texture_rect_region(TEX_FLOOR, r, ArpgData.SRC_FLOOR)
 			else:
 				draw_texture_rect_region(TEX_WALL, r, ArpgData.SRC_WALL)

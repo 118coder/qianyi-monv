@@ -105,6 +105,34 @@ static func load_dungeon(path: String) -> ArpgDungeon:
 			q.append(nb)
 	dun.stair_cell = far
 	dun.boss_floor = false      # 方案 C：场景试玩不进 Boss 层
+	# 图块视觉：保留每格索引 + 解码 tileset（world._draw 优先画场景图块，无 tileset 回退默认地砖）
+	dun.tile_ids = PackedInt32Array()
+	dun.tile_ids.resize(w * h)
+	dun.tile_ids.fill(-1)
+	for ty in sh:
+		for tx in sw:
+			var t: int = int(src[ty * sw + tx])
+			if t < 0:
+				continue
+			for ox in ratio:
+				for oy in ratio:
+					var gx2: int = tx * ratio + ox
+					var gy2: int = ty * ratio + oy
+					if gx2 < w and gy2 < h:
+						dun.tile_ids[gy2 * w + gx2] = t
+	var tset: String = str(d.get("tileset", ""))
+	if tset != "" and FileAccess.file_exists(tset):
+		var img := Image.new()
+		var img_err := img.load(ProjectSettings.globalize_path(tset))
+		if img_err == OK:
+			dun.tileset_tex = ImageTexture.create_from_image(img)
+			dun.tileset_cols = int(d.get("tileset_cols", maxi(1, img.get_width() / gs)))
+			dun.tile_px = gs
+			print("[SceneLoader] 图块集已载入：%s（%d×%d）" % [tset, img.get_width(), img.get_height()])
+		else:
+			print("[SceneLoader] 图块集解码失败（%s）：回退默认地砖" % tset)
+	else:
+		print("[SceneLoader] 无有效图块集，回退默认地砖")
 	print("[SceneLoader] %s → %d×%d（比例 ×%d）· %d 个房间 · 起点 %s 楼梯 %s" % [
 		str(d.get("name", path)), w, h, ratio, rooms.size(), dun.start_cell, dun.stair_cell])
 	return dun

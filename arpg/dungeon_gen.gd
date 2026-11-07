@@ -44,6 +44,11 @@ var stair_cell := Vector2i(-1, -1)     # 楼梯格（最远房间中心）；Bos
 var corridor_w := 2
 var boss_floor := false
 var rng := RandomNumberGenerator.new()
+# 手搭场景视觉（scene_loader 填充；随机生成的层为 null → world 用默认地砖）
+var tile_ids := PackedInt32Array()   # 行优先图块索引（-1 = 无图块/墙），尺寸 w*h
+var tileset_tex: Texture2D = null    # 场景图块集（Image.load 直接解码，绕过导入系统）
+var tileset_cols := 0                # 图块集横向图块数
+var tile_px := 32                    # 图块边长像素（与逻辑格同尺寸时 1:1 绘制）
 
 var _nav: AStarGrid2D
 var _edges := []          # 最终走廊边 [[i, j], ...]（用于判定叶节点房间）
