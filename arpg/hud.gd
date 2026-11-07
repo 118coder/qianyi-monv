@@ -4,6 +4,7 @@ extends CanvasLayer
 ## process_mode 设为 ALWAYS，保证暂停时菜单仍可用。
 
 signal start_selected(char_id: String)
+var scene_mode := false   # 选人画面「试玩手搭场景」按钮置位 → start_run 时进入场景模式
 signal back_to_title
 signal resume_requested
 signal retreat_requested
@@ -1132,6 +1133,9 @@ func _char_card(id: String) -> Control:
 	skl.custom_minimum_size = Vector2(200, 0)
 	v.add_child(skl)
 	v.add_child(_btn("选择出击", func(): start_selected.emit(id), "primary"))
+	v.add_child(_btn("试玩手搭场景", func():
+		scene_mode = true
+		start_selected.emit(id)))
 	return panel
 
 
