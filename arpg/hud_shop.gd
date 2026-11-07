@@ -150,7 +150,11 @@ func _forge_row(rpg, item_id: String) -> Control:
 				hud.game.hud.log(err)
 			else:
 				hud.game.hud.log("%s 强化成功，当前 +%d" % [eq.get("name", item_id), int(rpg.forge_level.get(item_id, 0))])
-				hud.game.play_sfx("cursor")
+				hud.game.play_sfx("heal", -4.0)
+				# 铁砧火花：强化成功的形体反馈（商店暂停态下粒子冻结，恢复后补播——观感一致）
+				if hud.game.world != null and is_instance_valid(hud.game.world):
+					hud.game.world.spawn_pxfx("hit", hud.game.player.position if hud.game.player != null else Vector2.ZERO,
+						{"scale": 0.8, "tint": Color(1.0, 0.8, 0.3)})
 			refresh()]], hud.C_TEXT if can else hud.C_TEXT_DIM, not can)
 	return row
 
