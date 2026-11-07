@@ -613,7 +613,7 @@ func try_pickup_for(unit, drop_id: int) -> bool:
 	var item_id: String = world.pickups.take_by_id(drop_id)
 	quests.on_pickup(item_id)
 	var iname: String = ArpgBalance.ITEMS[item_id]["name"]
-	hud.log("%s 拾取 %s（%d/%d 格）" % [(unit.uid if unit != null else "?"), iname, rpg.inventory.used(), rpg.inventory.cap])
+	hud.log("%s 拾取 %s（%d/%d 格）" % [(unit.unit_name if unit != null and "unit_name" in unit else (unit.uid if unit != null else "?")), iname, rpg.inventory.used(), rpg.inventory.cap])
 	play_sfx("cursor", -10.0)
 	return true
 

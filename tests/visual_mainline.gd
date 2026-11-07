@@ -50,7 +50,7 @@ func _run() -> void:
 	for i in 15:
 		await process_frame
 	main.hud.close_shop()
-	main.hud._switch_menu_tab("任务")
+	main.hud.menu_screen._switch_menu_tab("任务")
 	main._toggle_menu()
 	for i in 12:
 		await process_frame
