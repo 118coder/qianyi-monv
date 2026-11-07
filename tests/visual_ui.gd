@@ -12,12 +12,12 @@ func _run() -> void:
 	main.start_run("witch")
 	for i in 10:
 		await process_frame
-	main.hud._switch_menu_tab("状态")
+	main.hud.menu_screen._switch_menu_tab("状态")
 	main._toggle_menu()
 	for i in 6:
 		await process_frame
 	main._toggle_menu()
-	main.hud._switch_menu_tab("背包")
+	main.hud.menu_screen._switch_menu_tab("背包")
 	main._toggle_menu()
 	for i in 6:
 		await process_frame

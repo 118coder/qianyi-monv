@@ -67,4 +67,4 @@ func _throttled_warn(msg: String) -> void:
 	var now := Time.get_ticks_msec()
 	if now - int(_warn_ms.get(msg, 0)) > 2000:
 		_warn_ms[msg] = now
-		main.hud.log(msg)
+		print("[PICKUP] " + msg)   # 仲裁拒绝是内部调试图（uid 语言），不进玩家日志

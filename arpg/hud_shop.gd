@@ -27,13 +27,14 @@ func build() -> void:
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shop_root.add_child(dim)
 	var panel: PanelContainer = hud._panel_box()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.anchor_left = 0.5
 	panel.anchor_right = 0.5
 	panel.anchor_top = 0.5
 	panel.anchor_bottom = 0.5
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	panel.offset_left = -330
+	panel.offset_right = 330
+	panel.offset_top = -250
+	panel.offset_bottom = 250
 	shop_root.add_child(panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
