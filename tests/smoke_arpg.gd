@@ -303,6 +303,14 @@ func _run() -> void:
 	main.rpg.forge_level["sword_iron"] = 99
 	_check(main.rpg.forge_item("sword_iron").contains("上限"), "强化上限拦截")
 	main.rpg.forge_level["sword_iron"] = 3   # 恢复合法值（脏状态会污染后续测试）
+	# 日常委托：daily 任务结算日刷新（done → active），支撑第 2 天起的收入线
+	var dq: Dictionary = ArpgBalance.data.get("quests", {}).get("q_d1", {})
+	_check(bool(dq.get("daily", false)) and int(dq.get("count", 0)) == 10, "日常委托已载入（每日 10 杀）")
+	main.rpg.quests["q_d1"]["state"] = "done"
+	main.rpg.quests["q_d1"]["progress"] = 10
+	main.economy.settle()   # 走一遍结算（day+1 → daily 重置）
+	var dq2: Dictionary = main.rpg.quests["q_d1"]
+	_check(str(dq2["state"]) == "active" and int(dq2["progress"]) == 0, "日常委托次日刷新（done→active）")
 	main.rpg.gold = 500
 	main.rpg.inventory.add("orb")
 	_check(main.shop.sell_all_goods() >= 0, "一键卖出")
