@@ -28,6 +28,7 @@ var over: bool:
 ## 新脚本未进 class cache 时也能引用（见 HANDOFF §6 坑 9）
 const CameraRig := preload("res://arpg/camera_rig.gd")
 const CameraDirector := preload("res://arpg/camera_director.gd")
+const ThreatSystem := preload("res://arpg/threat_system.gd")
 
 var hud: ArpgHUD
 var world: ArpgWorld
@@ -150,6 +151,7 @@ var save_sys: ArpgSaveSystem
 var economy: ArpgEconomy
 var settings: ArpgSettings
 var audio: ArpgAudioManager
+var threat: ThreatSystem          # 威胁值系统（Boss 读玩家状态，见 threat_system.gd）
 var _menu_open := false
 
 # 热重载监视
@@ -209,6 +211,8 @@ func _ready() -> void:
 	shop.setup(self)
 	economy = ArpgEconomy.new()
 	economy.setup(self)
+	threat = ThreatSystem.new()
+	threat.setup(self)
 	save_sys = ArpgSaveSystem.new()
 	save_sys.setup(self)
 	events = SrpgEventSystem.new(self)
@@ -263,6 +267,7 @@ func start_run(id: String) -> void:
 	combo_t = 0.0
 	combo_best = 0
 	quote_cd = 0.0
+	threat.reset()   # 新一天新状态：威胁值回落到起始档
 	rpg.setup()   # 刷新背包容量/任务表；金币与物品跨局保留（商店循环）
 	if not rpg.inventory.has("potion"):
 		rpg.inventory.add("potion", 3)
@@ -450,6 +455,15 @@ func _process(delta: float) -> void:
 			print("[BENCH] %.1fs 平均帧率 %.1f FPS · 敌 %d · 敌群模拟 %.2fms/帧" % [
 				el, avg, world.mob_count(), world.mobs.sim_ms])
 			get_tree().quit(0 if avg >= 50.0 else 1)
+
+	# 威胁值系统：语义按键统计（狂按检测）+ 逐帧状态判定（低血/贴脸/站桩）。
+	# Boss 招式池读 threat.value（mob_system 快照），玩家侧只管喂信号
+	if threat != null:
+		for a in ThreatSystem.FEED_ACTIONS:
+			if InputMap.has_action(a) and Input.is_action_just_pressed(a):
+				threat.on_input()
+		if player != null and is_instance_valid(player):
+			threat.update(delta, player, world.mobs if world != null else null)
 
 	if Input.is_action_just_pressed("potion"):
 		drink_potion()
@@ -705,6 +719,8 @@ func _debug_rows() -> Array:
 	if world != null and world.mobs != null:
 		out.append("AI 质量: 卡住 %.0f%% · 堆叠 %.0f%% · 敌群 %.2fms" % [
 			world.mobs.stuck_ratio * 100.0, world.mobs.stack_ratio * 100.0, world.mobs.sim_ms])
+	if threat != null:
+		out.append(threat.debug_info())
 	if camera != null:
 		out.append(camera.debug_info())
 	if dungeon != null:
@@ -733,6 +749,8 @@ func drink_potion() -> void:
 	if not rpg.inventory.remove("potion", 1):
 		hud.log("没有药水了！")
 		return
+	if threat != null:
+		threat.on_potion()   # 喝药 = 压力信号（Boss 会读，且喝后狂按会追加）
 	var heal: int = int(ArpgBalance.ITEMS["potion"]["heal"])
 	u.hp = mini(u.max_hp, u.hp + heal)
 	u.heal_flash()

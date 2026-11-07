@@ -592,6 +592,57 @@ func _run() -> void:
 	_check(not main.party._is_open(wall_cell), "墙格判为不可走")
 	_check(main.party._is_open(main.party._nearest_open(wall_cell)), "最近可走格吸附有效")
 
+	# == 14. 威胁值系统（影之刃零式：Boss 读玩家状态） ==
+	print("== 14. 威胁值系统 ==")
+	_check(ArpgBalance.data.has("threat"), "threat 段载入")
+	var th_moves: Dictionary = ArpgBalance.data.get("threat", {}).get("moves", {})
+	_check(th_moves.size() == 4, "Boss 招式池 4 招（charge/slam/backstep/observe）")
+	_check(InputMap.has_action("purge"), "purge 动作已注册（R 键净化可按）")
+	_check(ArpgBalance.data.get("items", {}).has("purge"), "净化卷轴物品存在")
+	var drop_has_purge := false
+	for row in ArpgBalance.data.get("drop_base", []):
+		if row.size() >= 1 and str(row[0]) == "purge":
+			drop_has_purge = true
+	_check(drop_has_purge, "drop_base 含净化卷轴（此前被 json 覆盖丢失）")
+	_check(main.threat != null, "威胁值系统已挂载")
+	if main.threat != null:
+		main.threat.reset()
+		var t0: float = main.threat.value
+		_check(absf(t0 - float(ArpgBalance.data["threat"]["start"])) < 0.01, "reset 后回到起始值")
+		main.threat.on_potion()
+		_check(main.threat.value >= t0 + 7.5, "喝药加分")
+		var t1: float = main.threat.value
+		main.threat.on_input()   # 喝药后 1.5s 窗口内的按键 → 狂按追加
+		_check(main.threat.value > t1, "喝药后狂按追加加分")
+		main.threat.reset()
+		var t2: float = main.threat.value
+		main.threat.on_player_hurt()
+		_check(absf(main.threat.value - (t2 + 4.0)) < 0.01, "受击加分")
+		# 狂按窗口结算：窗口内按键超阈值 → +5（每窗口只结算一次）
+		main.threat.reset()
+		var t3: float = main.threat.value
+		for k in 8:
+			main.threat.on_input()
+		main.threat.update(1.2, main.player, main.world.mobs)   # 窗口到期结算
+		# mash +5，常态缓降 -1.5*1.2，净 ≥ +3.2（低血/贴脸只增不减）
+		_check(main.threat.value >= t3 + 3.0, "1 秒内按键超阈值结算加分")
+		# 权重插值：低威胁后撤/观察占优，高威胁突进/震地占优
+		main.threat.value = 10.0
+		var wl: Dictionary = main.threat.move_weights()
+		main.threat.value = 95.0
+		var wh: Dictionary = main.threat.move_weights()
+		_check(float(wh["charge"]) > float(wl["charge"]) and float(wh["slam"]) > float(wl["slam"]),
+			"高威胁突进/震地权重上升")
+		_check(float(wh["backstep"]) < float(wl["backstep"]), "高威胁后撤权重下降")
+		_check(main.threat.band() == 2, "威胁值 95 → 凶暴档")
+		main.threat.value = 10.0
+		_check(main.threat.band() == 0, "威胁值 10 → 冷静档")
+		# 上下限钳制
+		main.threat.value = 500.0
+		main.threat.update(0.016, main.player, main.world.mobs)
+		_check(main.threat.value <= 100.0, "威胁值上限钳制")
+		main.threat.reset()
+
 	if _failed:
 		quit(1)
 	else:

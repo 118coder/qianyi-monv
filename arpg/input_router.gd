@@ -14,6 +14,7 @@ static func setup() -> void:
 		"skill": [KEY_K, KEY_X],
 		"potion": [KEY_Q],
 		"interact": [KEY_E],
+		"purge": [KEY_R],   # 净化卷轴（RR 批漏注册：动作没进 InputMap，R 键按不出）
 	}
 	for action in defs:
 		if not InputMap.has_action(action):
