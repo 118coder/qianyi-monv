@@ -63,6 +63,9 @@ var stun := 0.0
 var iframes := 0.0
 var slow_t := 0.0                # 冰霜词缀减速剩余秒（命中时由 mob_system 设置）
 var hurt_amp_t := 0.0            # 易伤词缀增伤剩余秒（受伤 ×1.3）
+var burn_t := 0.0                # 燃烧 DoT 剩余秒
+var burn_dps := 0.0              # 燃烧每秒伤害
+var _burn_tick := 0.0            # 燃烧视觉节拍（0.6s 一次火色火花）
 var dash_t := 0.0
 var dash_dir := Vector2.DOWN
 var dash_hit := {}
@@ -149,6 +152,17 @@ func _physics_process(delta: float) -> void:
 	stun = maxf(0.0, stun - delta)
 	slow_t = maxf(0.0, slow_t - delta)
 	hurt_amp_t = maxf(0.0, hurt_amp_t - delta)
+	# 燃烧 DoT：每秒灼烧（绕护甲的持续伤害；触发死亡流程），0.6s 一次火色火花提示
+	if burn_t > 0.0:
+		burn_t = maxf(0.0, burn_t - delta)
+		hp = maxi(0, hp - int(ceil(burn_dps * delta)))
+		_burn_tick -= delta
+		if _burn_tick <= 0.0:
+			_burn_tick = 0.6
+			main.world.spawn_hit_spark(position, Color(1.0, 0.5, 0.1))
+		if hp <= 0 and not dead:
+			dead = true
+			main.on_player_dead()
 	iframes = maxf(0.0, iframes - delta)
 	if in_combat_until > 0.0:
 		in_combat_until -= delta
