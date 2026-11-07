@@ -338,6 +338,10 @@ func _intro() -> void:
 			break
 	await hud.show_banner(("地下 %d 层 · %s" % [floor_no, chapter]) if chapter != "" else "地下 %d 层" % floor_no,
 		Color(0.16, 0.32, 0.65))
+	# 日循环开场叙事：非首日的下一天打捞，用 toast 提示天数与债务（压迫感可视化）
+	if rpg.day > 1:
+		hud.set_quest_toast("第 %d 天 · 债务 %dG · 店租 %dG/日" % [rpg.day, rpg.debt,
+			int(ArpgBalance.data.get("rent", {}).get("daily", 0))])
 	if events != null:
 		await events.on_phase_start("player", floor_no)
 
