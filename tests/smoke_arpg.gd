@@ -821,6 +821,50 @@ func _run() -> void:
 	else:
 		_check(true, "Boss 模板未载入（跳过 stagger 直查）")
 
+	# == 18. 蓄力重击 + 药水前摇 ==
+	print("== 18. 蓄力重击与药水前摇 ==")
+	if main.possession != null:
+		main.possession.current_unit = main.player   # 第 7 节切换测试可能停在队友身上，切回主控
+	_check(ArpgBalance.data.has("heavy"), "heavy 段载入")
+	_check(float(ArpgBalance.ITEMS["potion"].get("windup", 0.0)) > 0.0, "药水前摇配置（0.35s）")
+	# 清场：防击杀连锁（升级回满 SP/HP 会污染后续断言）
+	for mi in range(main.world.mob_count()):
+		main.world.mobs.hp[mi] = 0
+	await create_timer(0.1).timeout
+	pl3.stun = 0.0
+	pl3.dead = false
+	pl3.atk_timer = 0.0
+	pl3.sp = pl3.max_sp
+	var m1: float = pl3._do_heavy()
+	_check(absf(m1 - 1.4 * 1.3) < 0.01, "SP 富余：强化重击 ×%.2f" % m1)
+	_check(pl3.sp < pl3.max_sp, "强化重击消耗 SP 12")
+	pl3.sp = 0
+	pl3.atk_timer = 0.0
+	var m2: float = pl3._do_heavy()
+	_check(absf(m2 - 1.4 * 0.77) < 0.01, "SP 不足：弱化重击 ×%.2f（仍可出招）" % m2)
+	# 按住攻击自动蓄力（按住类输入 action_press 可靠；just_pressed 才有帧序坑）
+	pl3.sp = pl3.max_sp
+	pl3.iframes = 999.0   # 测试期间免受击（防打断蓄力）
+	Input.action_press("attack")
+	await create_timer(0.55).timeout
+	Input.action_release("attack")
+	_check(pl3.atk_charge_fired and pl3.sp < pl3.max_sp, "按住 0.45s 自动出蓄力重击（强化档扣 SP）")
+	pl3.atk_hold_t = 0.0
+	pl3.atk_charge_fired = false
+	# 药水前摇：主控喝药延迟到账（被击杀则作废——喝药时机成为风险决策）
+	pl3.iframes = 999.0
+	pl3.burn_t = 0.0
+	main.rpg.inventory.add("potion", 1)
+	pl3.hp = 50
+	main.drink_potion()
+	_check(pl3.potion_t > 0.0, "喝药进入前摇")
+	_check(pl3.hp == 50, "前摇期间回血未到账")
+	await create_timer(0.45).timeout
+	_check(pl3.hp == 100, "前摇结束回血到账（50 → 100）")
+	pl3.iframes = 0.0
+	pl3.st = pl3.max_st
+	main.threat.reset()
+
 	if _failed:
 		quit(1)
 	else:

@@ -280,6 +280,11 @@ static func defaults() -> Dictionary:
 			"stagger_t": 0.9, "stagger_knock": 260.0,
 			"parry_stagger_t": 0.3, "parry_stagger_knock": 120.0,
 		},
+		"heavy": {
+			"charge_time": 0.45, "mult": 1.4,
+			"emp_mult": 1.3, "weak_mult": 0.77,
+			"emp_sp_ratio": 0.35, "sp_cost": 12, "cd_mult": 1.2,
+		},
 		"threat": {
 			"enabled": true, "start": 25.0, "max": 100.0,
 			"gain": {
@@ -369,7 +374,7 @@ static func defaults() -> Dictionary:
 			"ore": {"name": "铁矿", "kind": "goods", "value": 22, "tint": [0.68, 0.72, 0.82]},
 			"gems": {"name": "魔石", "kind": "goods", "value": 60, "tint": [0.45, 0.6, 1.0]},
 			"orb": {"name": "宝玉", "kind": "goods", "value": 120, "tint": [1.0, 0.75, 0.3]},
-			"potion": {"name": "回复药水", "kind": "use", "heal": 50, "value": 25, "tint": [1.0, 0.42, 0.48]},
+			"potion": {"name": "回复药水", "kind": "use", "heal": 50, "value": 25, "windup": 0.35, "tint": [1.0, 0.42, 0.48]},
 			"purge": {"name": "净化卷轴", "kind": "use", "purge": true, "value": 18, "tint": [0.5, 0.8, 1.0]},
 		},
 		"apc_units": {

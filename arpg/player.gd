@@ -85,6 +85,12 @@ var parry_perfect_until := 0.0  # 本次窗口的完美段阈值（elapsed <= �
 var parry_mash_n := 0           # 0.4s 内连续按压次数（窗口缩小档位）
 var parry_mash_t := 0.0         # 距上次按压的计时
 var parry_cd := 0.0             # 空挥/普通弹反后的冷却
+# —— 蓄力重击（影之刃方案批 5：按住攻击 ≥0.45s 自动出重击，SP 富余时泛蓝光强化）——
+var atk_hold_t := 0.0           # 攻击键按住时长
+var atk_charge_fired := false   # 本次按住是否已触发过重击（一次按住只出一记）
+# —— 药水前摇（批 5：主控喝药 0.35s 后结算，走位可走）——
+var potion_t := 0.0             # 喝药前摇剩余秒（>0 = 回血未到账）
+var potion_heal := 0            # 前摇结束后的回血量
 var lunge := Vector2.ZERO       # 攻击前冲冲量
 var knock := Vector2.ZERO
 var _move_vel := Vector2.ZERO   # 平滑移动分量（不含击退/前冲）
@@ -169,6 +175,20 @@ func _physics_process(delta: float) -> void:
 	stun = maxf(0.0, stun - delta)
 	slow_t = maxf(0.0, slow_t - delta)
 	hurt_amp_t = maxf(0.0, hurt_amp_t - delta)
+	# 药水前摇：到点结算回血（走位可走；被击杀则药水作废——喝药的时机风险）
+	if potion_t > 0.0:
+		potion_t -= delta
+		if potion_t <= 0.0:
+			potion_t = 0.0
+			var healed := potion_heal
+			potion_heal = 0
+			hp = mini(max_hp, hp + healed)
+			heal_flash()
+			hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
+			world.spawn_popup("+%d" % healed, position, Color(0.5, 1, 0.55))
+			world.spawn_nova(position, Color(0.5, 1, 0.6))
+			world.spawn_pxfx("heal", position + Vector2(0, -6), {"scale": 0.6, "speed": 1.4})
+			main.play_sfx("heal")
 	# 耐力回复：消耗动作后延迟 regen_delay 才开始回（防「消耗-瞬间回满」刷循环）
 	if st_regen_t > 0.0:
 		st_regen_t -= delta
@@ -275,6 +295,26 @@ func _physics_process(delta: float) -> void:
 	if stun <= 0.0 and possessed:
 		if Input.is_action_just_pressed("attack") and atk_timer <= 0.0:
 			_do_attack()
+		# 蓄力重击：按住攻击键累积，达阈值自动出重击（轻点普攻节奏不变）
+		if Input.is_action_pressed("attack"):
+			if not atk_charge_fired:
+				atk_hold_t += delta
+				var hcfg: Dictionary = ArpgBalance.data.get("heavy", {})
+				var ctime := float(hcfg.get("charge_time", 0.45))
+				if atk_hold_t < ctime:
+					# 蓄力读感：精灵渐泛蓝（越满越蓝，提示重击将至）
+					var crg := clampf(atk_hold_t / ctime, 0.0, 1.0)
+					if atk_hold_t > 0.12:
+						sprite.modulate = Color(1, 1, 1).lerp(Color(0.55, 0.75, 1.0), crg * 0.75)
+				else:
+					atk_charge_fired = true
+					sprite.modulate = Color.WHITE
+					_do_heavy()
+		else:
+			atk_hold_t = 0.0
+			atk_charge_fired = false
+			if sprite.modulate != Color(1, 0.35, 0.35):
+				sprite.modulate = Color.WHITE
 		if Input.is_action_just_pressed("dodge"):
 			_do_dodge(dir)
 		if Input.is_action_just_pressed("parry"):
@@ -435,6 +475,44 @@ func _do_attack() -> void:
 		lunge = -facing * 50.0
 		world.spawn_projectile(position + facing * 14.0, facing, float(tpl["proj_spd"]), eff_atk(), "player", Color(0.85, 0.55, 1.0), "orb")
 	world.main.play_sfx("magic" if weapon == "magic" else "attack", -10.0 if weapon == "magic" else -6.0)
+
+
+## 蓄力重击（按住攻击 0.45s 自动触发）：基础 ×1.4；SP 富余（≥35%）泛蓝光 ×1.3 并消耗 SP，
+## SP 不足仍可出但 ×0.77 无光——「MP 条预判强化状态」的可读语言（影之刃方案 §五-4）。
+## 返回实际应用的伤害倍率（测试断言用）。
+func _do_heavy() -> float:
+	if stun > 0.0 or dead:
+		return 0.0
+	var hcfg: Dictionary = ArpgBalance.data.get("heavy", {})
+	var emp := float(sp) / float(max_sp) >= float(hcfg.get("emp_sp_ratio", 0.35))
+	var mult := float(hcfg.get("mult", 1.4))
+	if emp:
+		mult *= float(hcfg.get("emp_mult", 1.3))
+		sp = maxi(0, sp - int(hcfg.get("sp_cost", 12)))
+		hp_bar.update_values(float(hp) / max_hp, float(sp) / max_sp)
+	else:
+		mult *= float(hcfg.get("weak_mult", 0.77))
+	atk_timer = float(tpl["atk_cd"]) * float(hcfg.get("cd_mult", 1.2))
+	var weapon: String = tpl["weapon"]
+	pop(1.25, 0.82)
+	if weapon == "melee":
+		lunge = facing * 260.0
+		world.spawn_slash(position + facing * 15.0, facing.angle(),
+			Color(0.55, 0.75, 1.0) if emp else Color(0.75, 0.78, 0.85))
+		for i in world.mobs_in_arc(position, facing.angle(), atk_range + 10.0, 1.35):
+			world.damage_mob(i, int(eff_atk() * mult), position, 240.0)
+	else:
+		lunge = -facing * 90.0
+		world.spawn_projectile(position + facing * 14.0, facing, float(tpl["proj_spd"]),
+			int(eff_atk() * mult), "player",
+			Color(0.55, 0.75, 1.0) if emp else Color(0.75, 0.78, 0.85),
+			"arrow" if weapon == "ranged" else "orb")
+	if emp:
+		world.spawn_nova(position, Color(0.55, 0.75, 1.0, 0.7))
+	main.play_sfx("attack", -3.0)
+	main.add_shake(0.22 if emp else 0.12)
+	main.rumble(0.3, 0.55, 0.18)
+	return mult
 
 
 # ———————— 技能系统 v2（数据驱动：balance.skills + char_skills + 等级解锁） ————————
