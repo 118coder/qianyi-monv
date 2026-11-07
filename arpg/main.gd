@@ -159,7 +159,7 @@ var _map_mtime := 0
 
 
 func _ready() -> void:
-	_setup_input()
+	ArpgInputRouter.setup()
 	hud = ArpgHUD.new()
 	_slot("界面").add_child(hud)
 	ui = hud
@@ -236,95 +236,6 @@ func _ready() -> void:
 func _slot(node_name: String) -> Node:
 	var n := get_node_or_null(NodePath(node_name))
 	return n if n != null else self
-
-
-## 用代码注册输入映射（免改 project.godot）：键盘 + Xbox/PS 手柄通用语义键位
-func _setup_input() -> void:
-	var defs := {
-		"move_left": [KEY_A, KEY_LEFT],
-		"move_right": [KEY_D, KEY_RIGHT],
-		"move_up": [KEY_W, KEY_UP],
-		"move_down": [KEY_S, KEY_DOWN],
-		"attack": [KEY_J, KEY_Z],
-		"skill": [KEY_K, KEY_X],
-		"potion": [KEY_Q],
-		"interact": [KEY_E],
-	}
-	for action in defs:
-		if not InputMap.has_action(action):
-			InputMap.add_action(action)
-		for key in defs[action]:
-			var ev := InputEventKey.new()
-			ev.physical_keycode = key
-			InputMap.action_add_event(action, ev)
-
-	# —— 手柄（Godot 语义键位：A=Xbox A/PS叉, X=Xbox X/PS方块, B=Xbox B/PS圆圈, Y=Xbox Y/PS三角）——
-	var face := {
-		"attack": [JOY_BUTTON_A],       # A / 叉：普攻
-		"skill": [JOY_BUTTON_X],        # X / 方块：技能
-		"interact": [JOY_BUTTON_B],     # B / 圆圈：互动
-		"potion": [JOY_BUTTON_Y],       # Y / 三角：药水
-	}
-	for action in face:
-		for b in face[action]:
-			var jb := InputEventJoypadButton.new()
-			jb.button_index = b
-			InputMap.action_add_event(action, jb)
-	# 左摇杆 + 十字键移动
-	var axes := [
-		["move_left", JOY_AXIS_LEFT_X, -1.0], ["move_right", JOY_AXIS_LEFT_X, 1.0],
-		["move_up", JOY_AXIS_LEFT_Y, -1.0], ["move_down", JOY_AXIS_LEFT_Y, 1.0],
-	]
-	for a in axes:
-		var m := InputEventJoypadMotion.new()
-		m.axis = a[1]
-		m.axis_value = a[2]
-		InputMap.action_add_event(a[0], m)
-	var dpad := {
-		"move_left": JOY_BUTTON_DPAD_LEFT, "move_right": JOY_BUTTON_DPAD_RIGHT,
-		"move_up": JOY_BUTTON_DPAD_UP, "move_down": JOY_BUTTON_DPAD_DOWN,
-	}
-	for action in dpad:
-		var db := InputEventJoypadButton.new()
-		db.button_index = dpad[action]
-		InputMap.action_add_event(action, db)
-	# 扳机：RT 攻击 / LT 技能
-	var rt := InputEventJoypadMotion.new()
-	rt.axis = JOY_AXIS_TRIGGER_RIGHT
-	rt.axis_value = 1.0
-	InputMap.action_add_event("attack", rt)
-	var lt := InputEventJoypadMotion.new()
-	lt.axis = JOY_AXIS_TRIGGER_LEFT
-	lt.axis_value = 1.0
-	InputMap.action_add_event("skill", lt)
-	# Start = 暂停（并入 ui_cancel）
-	var st := InputEventJoypadButton.new()
-	st.button_index = JOY_BUTTON_START
-	InputMap.action_add_event("ui_cancel", st)
-	# 队伍/主控/调试
-	var more := {
-		"possession_next": [KEY_TAB],
-		"squad_cmd": [KEY_T],
-		"debug_panel": [KEY_F1],
-		"save_party": [KEY_F9],
-		"load_party": [KEY_F10],
-		"char_menu": [KEY_C],
-		"skill2": [KEY_L],
-		"skill3": [KEY_U],
-		"reload_balance": [KEY_F2],
-		"reload_map": [KEY_F3],
-		"restart_run": [KEY_F4],
-	}
-	for action in more:
-		if not InputMap.has_action(action):
-			InputMap.add_action(action)
-		for key in more[action]:
-			var ke := InputEventKey.new()
-			ke.physical_keycode = key
-			InputMap.action_add_event(action, ke)
-	# 摇杆死区
-	for a2 in ["move_left", "move_right", "move_up", "move_down"]:
-		InputMap.action_set_deadzone(a2, 0.28)
 
 
 ## 手柄震动（Xbox / PS；未连接手柄时静默跳过）
@@ -1085,36 +996,9 @@ func event_camera_focus(pos: Vector2, dur: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel"):
-		if state == State.PLAY and not get_tree().paused:
-			get_tree().paused = true
-			hud.show_pause()
-		elif get_tree().paused:
-			_resume()
+	# 输入路由拆分（P1-2）：键位配置与事件分发在 input_router.gd，这里是薄转发层
+	if ArpgInputRouter.unhandled(self, event):
 		return
-	if state != State.PLAY or get_tree().paused:
-		return
-	if event.is_action_pressed("possession_next"):
-		possession.cycle()
-	elif event.is_action_pressed("squad_cmd"):
-		_squad_cmd_i = (_squad_cmd_i + 1) % 3
-		party.set_squad_command(["active", "follow", "hold"][_squad_cmd_i])
-	elif event.is_action_pressed("debug_panel"):
-		hud.toggle_debug()
-	elif event.is_action_pressed("char_menu"):
-		_toggle_menu()
-	elif event.is_action_pressed("save_party"):
-		_save_party()
-	elif event.is_action_pressed("load_party"):
-		_load_party()
-	elif event.is_action_pressed("reload_balance"):
-		_manual_reload_balance()
-	elif event.is_action_pressed("reload_map"):
-		build_floor()
-		_map_mtime = _file_mtime(SrpgMapLoader.PATH)
-		hud.log("地图已热重载（保留队伍状态）")
-	elif event.is_action_pressed("restart_run"):
-		start_run(char_id)
 
 
 func _resume() -> void:
