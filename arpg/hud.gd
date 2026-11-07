@@ -69,6 +69,7 @@ var shop_tab := "buy"
 var shop_tab_nodes: Array = []   # 买入/卖出页签按钮（选中态高亮用）
 var shop_in_dungeon := false   # 地牢商人打开的商店：期间暂停世界，关闭恢复
 var toast_label: Label
+var toast_bg: ColorRect
 
 var _logs := []
 
@@ -185,6 +186,19 @@ func _ready() -> void:
 
 ## 队伍面板：可滚动，支持任意 N（需求书 §5.7）
 func _build_toast() -> void:
+	# 章节卡衬底：「新任务解锁」用大字号+暗底横条（章节推进的仪式感），普通完成用小字
+	toast_bg = ColorRect.new()
+	toast_bg.color = Color(0.04, 0.04, 0.08, 0.78)
+	toast_bg.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	toast_bg.anchor_left = 0.5
+	toast_bg.anchor_right = 0.5
+	toast_bg.offset_left = -260
+	toast_bg.offset_right = 260
+	toast_bg.offset_top = 66
+	toast_bg.offset_bottom = 106
+	toast_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast_bg.visible = false
+	root.add_child(toast_bg)
 	toast_label = _label(16, Color(1, 0.9, 0.4))
 	toast_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	toast_label.anchor_left = 0.5
@@ -214,15 +228,37 @@ func _play_next_toast() -> void:
 	if _toast_queue.is_empty():
 		_toast_playing = false
 		toast_label.visible = false
+		if toast_bg != null:
+			toast_bg.visible = false
 		return
-	toast_label.text = str(_toast_queue.pop_front())
+	var txt: String = str(_toast_queue.pop_front())
+	var is_chapter: bool = txt.begins_with("新任务解锁")
+	toast_label.text = txt
 	toast_label.visible = true
 	toast_label.modulate.a = 0.0
+	# 章节卡（新任务解锁）：大金字+暗底横条；普通完成保持小字
+	if is_chapter:
+		toast_label.add_theme_font_size_override("font_size", 22)
+		toast_label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.25))
+		toast_label.offset_top = 72
+		toast_bg.visible = true
+		toast_bg.modulate.a = 0.0
+	else:
+		toast_label.add_theme_font_size_override("font_size", 16)
+		toast_label.add_theme_color_override("font_color", Color(1, 0.9, 0.4))
+		toast_label.offset_top = 74
+		if toast_bg != null:
+			toast_bg.visible = false
 	var tw := create_tween()
+	tw.set_parallel(true)
 	tw.tween_property(toast_label, "modulate:a", 1.0, 0.18)
-	tw.tween_interval(1.8)
-	tw.tween_property(toast_label, "modulate:a", 0.0, 0.35)
-	tw.tween_callback(_play_next_toast)
+	if is_chapter:
+		tw.tween_property(toast_bg, "modulate:a", 1.0, 0.18)
+	tw.chain().tween_interval(1.8)
+	tw.chain().tween_property(toast_label, "modulate:a", 0.0, 0.35)
+	if is_chapter:
+		tw.parallel().tween_property(toast_bg, "modulate:a", 0.0, 0.35)
+	tw.chain().tween_callback(_play_next_toast)
 
 
 func _build_menu_ui() -> void:
