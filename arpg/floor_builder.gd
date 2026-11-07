@@ -147,8 +147,18 @@ static func _populate(main: Node) -> void:
 				continue
 			var tpl_id: String = ArpgBalance.weighted_pick(pool, dungeon.rng)
 			world.spawn_mob(tpl_id, cell, rng.randf() < ArpgBalance.ELITE_CHANCE, false)
-		# 宝箱房贴片（方案 B 扩展）：手搭障碍地形转印进宝箱房（居中，不贴边保连通）
-		var patch: Dictionary = ArpgSceneLoader.load_patch("res://data/scenes/patch_treasure.json")
+		# 宝箱房贴片（方案 B 扩展）：贴片池按层数选择（patch 的 min_floor 匹配最深者）
+		var patch_path := "res://data/scenes/patch_treasure.json"
+		var best_floor_req := -1
+		for pname in ["patch_treasure", "patch_story"]:
+			var pp: String = "res://data/scenes/%s.json" % pname
+			var pd: Dictionary = ArpgSceneLoader.load_patch(pp)
+			if not pd.is_empty():
+				var req: int = int(pd.get("min_floor", 0))
+				if main.floor_no >= req and req >= best_floor_req:
+					best_floor_req = req
+					patch_path = pp
+		var patch: Dictionary = ArpgSceneLoader.load_patch(patch_path)
 		var loot: Rect2i = dungeon.loot_room(rng)
 		if not patch.is_empty() and int(patch["w"]) <= loot.size.x - 2 and int(patch["h"]) <= loot.size.y - 2:
 			var ox: int = loot.position.x + (loot.size.x - int(patch["w"])) / 2

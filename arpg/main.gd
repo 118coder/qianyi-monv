@@ -342,6 +342,17 @@ func _intro() -> void:
 	if rpg.day > 1:
 		hud.set_quest_toast("第 %d 天 · 债务 %dG · 店租 %dG/日" % [rpg.day, rpg.debt,
 			int(ArpgBalance.data.get("rent", {}).get("daily", 0))])
+		# 今日行情随行提示（地牢里就能规划今日上架策略—— KK 批动态行情的玩家侧入口）
+		if not rpg.market_mod.is_empty():
+			var best_id := ""
+			var best_v := -1.0
+			for iid in rpg.market_mod:
+				if float(rpg.market_mod[iid]) > best_v:
+					best_v = float(rpg.market_mod[iid])
+					best_id = str(iid)
+			if best_id != "":
+				hud.set_quest_toast("今日行情：%s 最好卖（%.1f 倍）" % [
+					ArpgBalance.ITEMS.get(best_id, {}).get("name", best_id), best_v])
 	if events != null:
 		await events.on_phase_start("player", floor_no)
 
