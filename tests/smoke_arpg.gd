@@ -256,12 +256,12 @@ func _run() -> void:
 	var chests0: int = main.world.chests.size()
 	main.world.spawn_merchant(main.player.cell + Vector2i(-2, 0))
 	_check(main.world.chests.size() == chests0 + 1 and main.world.chests[-1].merchant, "神秘商人晶体生成")
-	var shop_was: bool = main.hud.shop_root.visible
+	var shop_was: bool = main.hud.shop_screen.shop_root.visible
 	main.hud.show_shop(true)
-	_check(main.hud.shop_root.visible and paused, "地牢商店打开且世界暂停")
+	_check(main.hud.shop_screen.shop_root.visible and paused, "地牢商店打开且世界暂停")
 	main.hud.close_shop()
-	_check(not main.hud.shop_root.visible and not paused, "商店关闭且世界恢复")
-	main.hud.shop_root.visible = shop_was
+	_check(not main.hud.shop_screen.shop_root.visible and not paused, "商店关闭且世界恢复")
+	main.hud.shop_screen.shop_root.visible = shop_was
 	# 血祭坛：献祭换攻击光环（伤害全局乘区）+ 换层重置
 	var atk_probe: int = main.world.mobs.count
 	main.altar_atk_mult = 1.3

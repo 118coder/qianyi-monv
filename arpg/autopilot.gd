@@ -106,7 +106,7 @@ func _play_tick() -> void:
 
 	# 交互优先：贴身宝箱 / 传送门 / 楼梯
 	# 地牢商店开着（商人晶体交互触发）→ 买一瓶药再关店继续打（否则世界暂停会卡死到看门狗）
-	if main.hud.shop_root != null and main.hud.shop_root.visible:
+	if main.hud.shop_screen != null and main.hud.shop_screen.shop_root != null 			and main.hud.shop_screen.shop_root.visible:
 		if _potion_count() < 3:
 			var err: String = main.shop.buy("potion")
 			print("[AUTOPLAY] 商店买药%s（剩 %dG）" % ["成功" if err == "" else "失败:" + err, main.rpg.gold])
