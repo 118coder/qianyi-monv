@@ -39,7 +39,7 @@ var boss_name: Label
 # 角色选择 / 结算 / 暂停
 var select_root: Control
 var settle_screen: ArpgHudSettle   # 结算屏（hud_settle.gd，P1-2 按屏拆分）
-var pause_root: Control
+var pause_screen: ArpgHudPause   # 暂停屏（hud_pause.gd，按屏拆分收官）
 
 # 队伍面板 / 调试面板
 var party_scroll: ScrollContainer
@@ -164,7 +164,8 @@ func _ready() -> void:
 	_build_select()
 	settle_screen = ArpgHudSettle.new(self)
 	settle_screen.build()
-	_build_pause()
+	pause_screen = ArpgHudPause.new(self)
+	pause_screen.build()
 	_build_party_panel()
 	_build_debug_panel()
 	_build_menu_ui()
@@ -543,6 +544,15 @@ func show_menu_ui(snap: Dictionary) -> void:
 
 func hide_menu_ui() -> void:
 	menu_root.visible = false
+
+
+## 暂停屏（hud_pause.gd 屏组件）：外部调用点保持不变
+func show_pause() -> void:
+	pause_screen.show()
+
+
+func hide_pause() -> void:
+	pause_screen.hide()
 
 
 ## 商店屏（hud_shop.gd 屏组件）：外部调用点保持不变
@@ -1081,44 +1091,6 @@ func _char_card(id: String) -> Control:
 # ———————— 结算 ————————
 
 # ———————— 暂停 ————————
-
-func _build_pause() -> void:
-	pause_root = Control.new()
-	pause_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	pause_root.visible = false
-	root.add_child(pause_root)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.55)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	pause_root.add_child(dim)
-	var v := VBoxContainer.new()
-	v.set_anchors_preset(Control.PRESET_CENTER)
-	v.anchor_left = 0.5
-	v.anchor_right = 0.5
-	v.anchor_top = 0.5
-	v.anchor_bottom = 0.5
-	v.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	v.grow_vertical = Control.GROW_DIRECTION_BOTH
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.add_theme_constant_override("separation", 12)
-	pause_root.add_child(v)
-	v.add_child(_label(26, Color(1, 1, 1), "暂停"))
-	var tip := _label(14, Color(1, 1, 1, 0.7), "继续深入，还是见好就收？")
-	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(tip)
-	var b1 := _btn("继续探索", func(): resume_requested.emit(), "primary")
-	v.add_child(b1)
-	var b2 := _btn("撤退结算（带走全部战利品）", func(): retreat_requested.emit())
-	v.add_child(b2)
-
-
-func show_pause() -> void:
-	pause_root.visible = true
-
-
-func hide_pause() -> void:
-	pause_root.visible = false
-
 
 func show_select() -> void:
 	select_root.visible = true
