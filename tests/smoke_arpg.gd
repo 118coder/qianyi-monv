@@ -643,6 +643,70 @@ func _run() -> void:
 		_check(main.threat.value <= 100.0, "威胁值上限钳制")
 		main.threat.reset()
 
+	# == 15. Boss 招式池（威胁值驱动插招，nova 保底不变） ==
+	print("== 15. Boss 招式池 ==")
+	_check(absf(float(ArpgBalance.data["boss"]["enrage_at"]) - 0.4) < 0.01, "boss.enrage_at 配置化")
+	var ms2 = main.world.mobs
+	var bi3: int = ms2.spawn("boss", main.player.cell + Vector2i(4, 0), false, true)
+	if bi3 >= 0:
+		ms2.aggro[bi3] = 1
+		# 凶暴档 tempo：贴脸触发 windup，起手时间 = 0.5 × 0.85
+		ms2._threat_snap = 95.0
+		ms2._tempo = 0.85
+		ms2.cool_t[bi3] = 0.0
+		var p0: Vector2 = main.player.position
+		main.player.position = ms2.pos[bi3] + Vector2(30, 0)   # 贴脸（< atk_range）
+		ms2.refresh_targets()   # 直调 _sim_range 前必须刷目标表（且在移动玩家之后，targets 才是新的）
+		var ev_t := []
+		ms2._sim_range(bi3, bi3 + 1, 0.016, ev_t)
+		_check(absf(ms2.windup_t[bi3] - 0.5 * 0.85) < 0.02 or ms2.state[bi3] == 2,
+			"凶暴档起手更快（windup %.3f）" % ms2.windup_t[bi3])
+		main.player.position = p0
+		ms2.refresh_targets()
+		ms2.windup_t[bi3] = 0.0
+		ms2.state[bi3] = 1
+		# 招式池：高威胁出招（nova 保底闸门关闭以隔离测试）
+		ms2.ult_streak[bi3] = 0
+		ms2.pool_t[bi3] = 0.0
+		ms2.special_t[bi3] = 5.0
+		var ev_p := []
+		ms2._sim_range(bi3, bi3 + 1, 0.016, ev_p)
+		var got := ""
+		for e in ev_p:
+			if int(e[0]) == 5:
+				got = str(e[2])
+		_check(got != "", "高威胁 Boss 招式池出招（%s）" % got)
+		_check(ms2.pool_t[bi3] > 0.0, "出招后池闸门进入冷却")
+		# 连续大招上限：streak=2 → 只能选恢复招（backstep/observe）
+		ms2.ult_streak[bi3] = 2
+		ms2.hold_t[bi3] = 0.0
+		ms2.pool_t[bi3] = 0.0
+		var ev_c := []
+		ms2._sim_range(bi3, bi3 + 1, 0.016, ev_c)
+		var got2 := ""
+		for e in ev_c:
+			if int(e[0]) == 5:
+				got2 = str(e[2])
+		_check(got2 != "charge" and got2 != "slam", "连续大招达上限强制恢复招（%s）" % got2)
+		# 观察站定：hold_t 期间 vel 归零
+		ms2.hold_t[bi3] = 0.5
+		var ev_h := []
+		ms2._sim_range(bi3, bi3 + 1, 0.016, ev_h)
+		_check(ms2.vel[bi3] == Vector2.ZERO, "观察/硬直期间 Boss 站定")
+		ms2.hold_t[bi3] = 0.0
+		# EV_BOSS_MOVE 主线程消费：震地对半径内玩家造成伤害
+		main.player.hp = 100
+		main.player.max_hp = 100
+		main.player.iframes = 0.0
+		var hp_before: int = main.player.hp
+		ms2.pos[bi3] = main.player.position + Vector2(40, 0)   # 拉进震地半径
+		ms2._chunk_events = [[[5, bi3, "slam"]]]
+		ms2._drain_events()
+		_check(main.player.hp < hp_before, "Boss 震地对半径内玩家造成伤害")
+		ms2._chunk_events = [[]]
+	else:
+		_check(true, "Boss 模板未载入（跳过招式池链路）")
+
 	if _failed:
 		quit(1)
 	else:

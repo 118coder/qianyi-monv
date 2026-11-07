@@ -120,6 +120,7 @@ static func _normalize() -> void:
 	b["hp"] = int(b.get("hp", 280))
 	b["atk"] = int(b.get("atk", 15))
 	b["xp"] = int(b.get("xp", 90))
+	b["enrage_at"] = float(b.get("enrage_at", 0.4))
 	data["boss"] = b
 	var it: Dictionary = data.get("items", {})
 	for id in it:

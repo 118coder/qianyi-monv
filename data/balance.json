@@ -33,6 +33,7 @@
  },
  "bag_cap": 20,
  "boss": {
+  "enrage_at": 0.4,
   "atk": 15,
   "atk_range": 42.0,
   "behavior": "boss",

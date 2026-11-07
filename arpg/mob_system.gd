@@ -68,6 +68,10 @@ var anim_t := PackedFloat32Array()
 var wander_dir := PackedVector2Array()
 var wander_t := PackedFloat32Array()
 var enraged := PackedByteArray()
+# —— Boss 招式池（威胁值驱动，threat_system 供值）——
+var hold_t := PackedFloat32Array()         # 站定计时（观察招 / 弹反硬直共用）
+var pool_t := PackedFloat32Array()         # 招式池闸门（nova 保底节奏之外的插招冷却）
+var ult_streak := PackedInt32Array()       # 连续大招数（charge/slam；达上限强制恢复招）
 # —— 局部避让 / 防卡死（AI 优化批）——
 var sep := PackedVector2Array()            # 分离推力（每拍重建，进 _try_move 步长）
 var stuck_t := PackedFloat32Array()        # 贴墙/被堵累计时长
@@ -86,6 +90,10 @@ var _ai_nudge_time := 0.45
 var _ai_nudge_speed := 0.6
 var _ai_arc_blend := 0.22
 var _ai_strafe := 0.5
+# —— 威胁值快照（主线程每帧拷一次，worker 只读快照——线程纪律）——
+var _threat_snap := 25.0
+var _tempo := 1.0                  # 凶暴档攻击节奏（windup ×tempo）
+var _enrage_at := 0.4              # 狂暴血线（boss.enrage_at）
 # —— 质量指标（压测/调试面板）——
 var stuck_ratio := 0.0
 var stack_ratio := 0.0
@@ -115,6 +123,7 @@ const EV_SHOOT := 1
 const EV_SPECIAL := 2
 const EV_AFFIX := 3
 const EV_ENRAGE := 4
+const EV_BOSS_MOVE := 5    # Boss 招式池/扑击的视觉与伤害（payload: [EV, i, 招式名]）
 
 
 func setup(m: Node, w: Node, d: ArpgDungeon) -> void:
@@ -154,6 +163,9 @@ func setup(m: Node, w: Node, d: ArpgDungeon) -> void:
 	stuck_t.resize(cap)
 	nudge_t.resize(cap)
 	nudge_dir.resize(cap)
+	hold_t.resize(cap)
+	pool_t.resize(cap)
+	ult_streak.resize(cap)
 	for tpl_id in ArpgBalance.ENEMIES:
 		_push_tpl(tpl_id, ArpgBalance.ENEMIES[tpl_id], false)
 	_push_tpl("boss", ArpgBalance.BOSS, true)
@@ -237,6 +249,9 @@ func spawn(tpl_id: String, cell: Vector2i, elite_f: bool = false, boss_f: bool =
 	stuck_t[i] = 0.0
 	nudge_t[i] = 0.0
 	nudge_dir[i] = Vector2.ZERO
+	hold_t[i] = 0.0
+	pool_t[i] = 1.5       # 招式池闸门：开局错开 nova 保底（3.0s），插招稍后入场
+	ult_streak[i] = 0
 	return i
 
 
@@ -361,6 +376,12 @@ func _physics_process(delta: float) -> void:
 	frame_no += 1
 	var t0 := Time.get_ticks_usec()
 	refresh_targets()
+	# 威胁值快照（threat_system 供值；worker 只读 _threat_snap/_tempo，不碰 main.threat）
+	if main.threat != null:
+		_threat_snap = main.threat.value
+		_tempo = 1.0
+		if bool(ArpgBalance.data.get("threat", {}).get("enabled", true)) and main.threat.band() == 2:
+			_tempo = float(ArpgBalance.data.get("threat", {}).get("tempo_aggressive", 0.85))
 	# 分离视野：相机可见矩形（主线程算一次，worker 只读）
 	var inv := get_viewport().get_canvas_transform().affine_inverse()
 	_sep_view = inv * Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
@@ -441,6 +462,7 @@ func refresh_targets() -> void:
 				al.append(0)
 	target_alive = al
 	_aggro = float(ArpgBalance.data.get("aggro_range", 185.0))
+	_enrage_at = float(ArpgBalance.data.get("boss", {}).get("enrage_at", 0.4))
 	# AI 参数（balance.json「ai」段，保存即热重载）
 	var ai_cfg: Dictionary = ArpgBalance.data.get("ai", {})
 	var sep_cfg: Dictionary = ai_cfg.get("separation", {})
@@ -666,23 +688,31 @@ func _sim_range(a: int, b: int, dt: float, ev: Array) -> void:
 				cool_t[i] = tpl_cool[tpl[i]]
 		elif beh == 2:
 			special_t[i] -= d
-			if enraged[i] == 0 and hp[i] < max_hp[i] * 0.4:
-				enraged[i] = 1
-				spd[i] = tpl_spd[tpl[i]] * 1.35
-				# 二阶段开场：横幅警告 + 召唤护主小鬼（一次性，走主线程事件队列）
-				ev.append([EV_ENRAGE, i])
-			if special_t[i] <= 0.0:
-				special_t[i] = 2.6 if enraged[i] == 1 else 3.4
-				ev.append([EV_SPECIAL, i])
-			_melee_move(i, to_p, dist)
+			if hold_t[i] > 0.0:
+				# 观察/硬直：站定（观察招与弹反硬直共用 hold_t；nova 保底计时照常走）
+				hold_t[i] -= d
+				vel[i] = Vector2.ZERO
+			else:
+				pool_t[i] = maxf(0.0, pool_t[i] - d)
+				if enraged[i] == 0 and hp[i] < max_hp[i] * _enrage_at:
+					enraged[i] = 1
+					spd[i] = tpl_spd[tpl[i]] * 1.35
+					# 二阶段开场：横幅警告 + 召唤护主小鬼（一次性，走主线程事件队列）
+					ev.append([EV_ENRAGE, i])
+				if special_t[i] <= 0.0:
+					special_t[i] = 2.6 if enraged[i] == 1 else 3.4
+					ev.append([EV_SPECIAL, i])
+				if pool_t[i] <= 0.0:
+					_boss_pick_move(i, to_p, dist, ev)
+				_melee_move(i, to_p, dist, ev)
 		elif beh == 1:
 			_ranged_move(i, to_p, dist)
 		else:
-			_melee_move(i, to_p, dist)
+			_melee_move(i, to_p, dist, ev)
 		_try_move(i, d)
 
 
-func _melee_move(i: int, to_p: Vector2, dist: float) -> void:
+func _melee_move(i: int, to_p: Vector2, dist: float, ev: Array) -> void:
 	# 扑击（狼/骑士/imp 等 melee 怪通用）：追击带内且冷却好 → 蓄势突进（贴脸后走正常咬人判定）
 	var ti := tpl[i]
 	if tpl_pounce[ti] == 1 and special_t[i] <= 0.0 and dist > atk_range[i]:
@@ -691,9 +721,8 @@ func _melee_move(i: int, to_p: Vector2, dist: float) -> void:
 			# cd 从该怪自身模板读（此前写死 wolf 的，骑士/imp 配了也会用错值）
 			special_t[i] = float(ArpgBalance.ENEMIES.get(str(tpl_name[ti]), {}).get("pounce_cd", 3.5))
 			lunge[i] = to_p.normalized() * tpl_pounce_speed[ti]
-			# mob_system 的 _physics_process 在主线程，popup/音效可直接调（不必走事件队列）
-			world.spawn_popup("!", pos[i] + Vector2(0, -26), Color(1.0, 0.4, 0.3), 22)
-			main.play_sfx("attack", -8.0)
+			# 线程纪律：popup/音效走事件（压测 >300 怪时 _sim_range 会进 worker 线程）
+			ev.append([EV_BOSS_MOVE, i, "pounce"])
 	if dist > atk_range[i]:
 		# 包抄弧：近距时每怪认领一个方位槽绕到侧翼，怪群成弧围攻而不是叠柱
 		# （方位槽每怪恒定 → 几何量按 i 预算缓存，热循环里不再 is_floor/rotate）
@@ -708,10 +737,71 @@ func _melee_move(i: int, to_p: Vector2, dist: float) -> void:
 		vel[i] = _chase_dir(i, goal) * spd[i]
 	elif cool_t[i] <= 0.0:
 		state[i] = 2
-		windup_t[i] = tpl_windup[tpl[i]]
+		windup_t[i] = tpl_windup[tpl[i]] * _tempo   # 凶暴档节奏：起手更快（threat.tempo_aggressive）
 		vel[i] = Vector2.ZERO
 	else:
 		vel[i] = Vector2.ZERO
+
+
+## Boss 招式池（威胁值驱动）：nova 是保底节奏（special_t 闸门不变），本池在保底之间
+## 按威胁权重插招——蓄力突进/范围震地/后撤/观察。worker 上下文安全：只写 SoA + 发事件，
+## 视觉/音效/伤害全部由主线程 _drain_events 的 EV_BOSS_MOVE 分支执行（仿 EV_ENRAGE 纪律）。
+## 权重来自 threat_system.move_weights 的同款插值（低/高威胁两列 → 按威胁值线性插值）。
+func _boss_pick_move(i: int, to_p: Vector2, dist: float, ev: Array) -> void:
+	var tcfg: Dictionary = ArpgBalance.data.get("threat", {})
+	if not bool(tcfg.get("enabled", true)):
+		return
+	var moves: Dictionary = tcfg.get("moves", {})
+	var t := clampf(_threat_snap, 0.0, 100.0) / 100.0
+	var w := {}
+	for mid in moves:
+		var mv: Dictionary = moves[mid]
+		w[mid] = maxf(0.0, lerpf(float(mv.get("low", 0.0)), float(mv.get("high", 0.0)), t))
+	# 可用性过滤：突进要距离带内（贴脸/太远都不突）
+	if dist < float(moves.get("charge", {}).get("range_min", 110.0)) \
+			or dist > float(moves.get("charge", {}).get("range_max", 340.0)):
+		w["charge"] = 0.0
+	# 连续大招上限：charge/slam 算大招，连续 ult_cap 次后强制恢复招（观察/后撤）
+	var cap := int(tcfg.get("ult_cap", 2))
+	if ult_streak[i] >= cap:
+		w["charge"] = 0.0
+		w["slam"] = 0.0
+	var total := 0.0
+	for mid in w:
+		total += w[mid]
+	if total <= 0.0:
+		return
+	# 确定性伪随机（worker 禁 randf，黄金角散列混入 frame_no 保证逐次变化）
+	var roll := ((i * 2654435761 + frame_no * 40503) & 0xFFFF) / 65536.0 * total
+	var pick := ""
+	for mid in w:
+		roll -= w[mid]
+		if roll <= 0.0:
+			pick = mid
+			break
+	if pick == "":
+		return
+	var pmv: Dictionary = moves[pick]
+	match pick:
+		"charge":
+			lunge[i] = to_p.normalized() * float(pmv.get("speed", 620.0))
+			pool_t[i] = float(pmv.get("cd", 6.0))
+			ult_streak[i] += 1
+			ev.append([EV_BOSS_MOVE, i, "charge"])
+		"slam":
+			pool_t[i] = float(pmv.get("cd", 7.5))
+			ult_streak[i] += 1
+			ev.append([EV_BOSS_MOVE, i, "slam"])
+		"backstep":
+			lunge[i] = -to_p.normalized() * float(pmv.get("speed", 560.0))
+			pool_t[i] = float(pmv.get("cd", 2.5))
+			ult_streak[i] = 0
+			ev.append([EV_BOSS_MOVE, i, "backstep"])
+		"observe":
+			hold_t[i] = float(pmv.get("dur", 1.1))
+			pool_t[i] = float(pmv.get("dur", 1.1))
+			ult_streak[i] = 0
+			ev.append([EV_BOSS_MOVE, i, "observe"])
 
 
 func _ranged_move(i: int, to_p: Vector2, dist: float) -> void:
@@ -1020,6 +1110,41 @@ func _drain_events() -> void:
 					if aname != "":
 						world.spawn_popup("%s！" % aname, pos[i4] + Vector2(0, -30), Color(1.0, 0.55, 0.35), 19)
 						main.hud.log("%s的%s出现了！" % [aname, tpl_name[tpl[i4]]])
+				EV_BOSS_MOVE:
+					# Boss 招式池/扑击的主线程执行段：视觉/音效/伤害全在这里（worker 只发事件）
+					var i6: int = e[1]
+					if not is_alive(i6):
+						break
+					var mv_kind: String = str(e[2])
+					match mv_kind:
+						"charge", "pounce":
+							world.spawn_popup("!", pos[i6] + Vector2(0, -34 if mv_kind == "charge" else -26),
+								Color(1.0, 0.4, 0.3), 26 if mv_kind == "charge" else 22)
+							main.play_sfx("attack", -8.0 if mv_kind == "pounce" else -6.0)
+						"slam":
+							# 范围震地：惩罚贴脸——半径内玩家与队友受伤（可闪避躲开 / 可弹反抵消）
+							var scfg: Dictionary = ArpgBalance.data.get("threat", {}).get("moves", {}).get("slam", {})
+							var srad := float(scfg.get("radius", 115.0))
+							var sdmg := int(atk[i6] * float(scfg.get("dmg_mult", 1.4)))
+							world.spawn_nova(pos[i6], Color(0.62, 0.55, 0.4))
+							world.spawn_pxfx("burst", pos[i6], {"scale": 1.3})
+							main.add_shake(0.45)
+							main.rumble(0.5, 0.9, 0.3)
+							main.hit_stop(0.06, 0.1)
+							main.play_sfx("fire", -4.0)
+							var pl = world.player
+							if pl != null and is_instance_valid(pl) and not pl.dead \
+									and pl.position.distance_to(pos[i6]) <= srad:
+								pl.take_damage(sdmg, pos[i6])
+							if main.party != null:
+								for f in main.party.friends:
+									if is_instance_valid(f) and not f.dead \
+											and f.position.distance_to(pos[i6]) <= srad:
+										f.take_damage(sdmg, pos[i6])
+						"backstep":
+							world.spawn_pxfx("burst", pos[i6], {"scale": 0.6, "tint": Color(0.7, 0.7, 0.75)})
+						"observe":
+							world.spawn_popup("?", pos[i6] + Vector2(0, -34), Color(0.8, 0.85, 0.95), 24)
 
 
 func _handle_deaths() -> void:
@@ -1077,6 +1202,9 @@ func _copy_slot(src: int, dst: int) -> void:
 	stuck_t[dst] = stuck_t[src]
 	nudge_t[dst] = nudge_t[src]
 	nudge_dir[dst] = nudge_dir[src]
+	hold_t[dst] = hold_t[src]
+	pool_t[dst] = pool_t[src]
+	ult_streak[dst] = ult_streak[src]
 
 
 ## 平衡热重载：模板表按名重建；存活怪保持血量比例并刷新派生属性
