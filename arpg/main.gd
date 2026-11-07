@@ -339,6 +339,10 @@ func rumble(weak: float, strong: float, dur: float) -> void:
 
 func start_run(id: String) -> void:
 	char_id = id
+	# 选人画面「试玩手搭场景」入口：命令行 --scene 已设则沿用其场景名，否则默认示例图
+	if hud != null and hud.scene_mode:
+		scene_name = scene_name if scene_name != "" else "scene001"
+		hud.scene_mode = false
 	floor_no = maxi(1, start_floor)      # 可视化配置：起始层（默认 1，等价于原行为）
 	kills = 0
 	combo_n = 0
