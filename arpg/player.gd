@@ -405,6 +405,8 @@ func use_skill(slot: int) -> void:
 	if sp < int(def["sp"]):
 		world.spawn_popup("SP不足", position, Color(0.6, 0.8, 1.0))
 		return
+	if main.threat != null:
+		main.threat.on_skill(float(sp) / float(max_sp))   # 威胁值：放技能=嚣张信号
 	sp -= int(def["sp"])
 	skill_cd = float(def["cd"])
 	var mult := float(def.get("dmg_mult", 1.0))
@@ -466,6 +468,8 @@ func take_damage(dmg: int, from_pos: Vector2) -> void:
 	hp = maxi(0, hp - maxi(1, dmg - eff_def()))
 	iframes = 0.55
 	in_combat_until = 4.0
+	if main.threat != null:
+		main.threat.on_player_hurt()   # 威胁值：受击=压力信号（只有真实命中的这口算）
 	knock = (position - from_pos).normalized() * 250.0
 	_move_vel = Vector2.ZERO
 	dash_t = 0.0                    # 受击打断冲刺

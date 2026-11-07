@@ -120,6 +120,7 @@ static func _normalize() -> void:
 	b["hp"] = int(b.get("hp", 280))
 	b["atk"] = int(b.get("atk", 15))
 	b["xp"] = int(b.get("xp", 90))
+	b["enrage_at"] = float(b.get("enrage_at", 0.4))
 	data["boss"] = b
 	var it: Dictionary = data.get("items", {})
 	for id in it:
@@ -263,6 +264,30 @@ static func defaults() -> Dictionary:
 			"stuck": {"after": 0.45, "nudge_time": 0.5, "nudge_speed": 0.6},
 			"arc_blend": 0.22,
 			"strafe_ratio": 0.5
+		},
+		"threat": {
+			"enabled": true, "start": 25.0, "max": 100.0,
+			"gain": {
+				"low_hp_ratio": 0.3, "low_hp_per_s": 1.5,
+				"potion": 8.0, "potion_mash_window": 1.5,
+				"potion_mash_per_input": 2.0, "potion_mash_cap": 8.0,
+				"mash_window": 1.0, "mash_threshold": 5, "mash": 5.0,
+				"hurt": 4.0, "skill": 2.0, "skill_rich_ratio": 0.8, "skill_rich": 2.0,
+				"point_blank_per_s": 1.2, "point_blank_dist": 95.0,
+			},
+			"relief": {
+				"calm_decay": 1.5, "idle_after": 2.0, "idle_extra": 3.0,
+				"dodge": 4.0, "parry": 2.0, "perfect_parry": 6.0,
+			},
+			"bands": {"calm": 30.0, "aggressive": 85.0},
+			"tempo_aggressive": 0.85, "pool_interval": 2.2, "ult_cap": 2,
+			"moves": {
+				"charge": {"low": 5.0, "high": 20.0, "cd": 6.0, "speed": 620.0,
+					"range_min": 110.0, "range_max": 340.0},
+				"slam": {"low": 10.0, "high": 25.0, "cd": 7.5, "radius": 115.0, "dmg_mult": 1.4},
+				"backstep": {"low": 25.0, "high": 5.0, "cd": 2.5, "speed": 560.0},
+				"observe": {"low": 20.0, "high": 0.0, "dur": 1.1},
+			},
 		},
 		"minimap": {
 			"enabled": true, "width": 184.0, "height": 132.0,
