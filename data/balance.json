@@ -896,6 +896,11 @@
    "name": "易伤",
    "amp": 3.0,
    "amp_mult": 1.3
+  },
+  "burning": {
+   "name": "燃烧",
+   "dot": 2.0,
+   "dur": 3.0
   }
  },
  "affix_chance": 0.7,

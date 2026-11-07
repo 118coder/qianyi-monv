@@ -246,9 +246,9 @@ func _run() -> void:
 	# 精英词缀：roll 落在合法域 / tough 倍率生效 / 临终爆炸死亡链路不崩
 	var mobs0_n: int = main.world.mob_count()
 	var ei: int = main.world.spawn_mob(ArpgBalance.ENEMIES.keys()[0], main.player.cell + Vector2i(2, 0), true)
-	_check(ei >= 0 and main.world.mobs.affix[ei] >= 0 and main.world.mobs.affix[ei] <= 6, "精英词缀 roll 合法域")
+	_check(ei >= 0 and main.world.mobs.affix[ei] >= 0 and main.world.mobs.affix[ei] <= 7, "精英词缀 roll 合法域")
 	var aff_tbl: Dictionary = ArpgBalance.data.get("affixes", {})
-	_check(aff_tbl.size() == 6, "affixes 段 6 词缀已载入")
+	_check(aff_tbl.size() >= 7, "affixes 段词缀已载入（%d 个）" % aff_tbl.size())
 	main.world.mobs.affix[ei] = int(ArpgMobSystem.AFFIX_IDS.get("burst", 4))   # 强制爆炸词缀验证死亡链路
 	main.world.mobs.damage(ei, 99999, main.player.position)
 	_check(true, "临终爆炸死亡链路无崩溃")
