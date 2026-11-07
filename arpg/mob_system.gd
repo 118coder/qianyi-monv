@@ -1169,11 +1169,15 @@ func _draw() -> void:
 		elif elite[i] == 1:
 			col = ArpgBalance.ELITE_TINT
 		# 受击挤压（squash & stretch）：flash 前半段横宽纵扁，命中瞬间的形体反馈
+		# 扑击蓄力（狼/骑士/imp）：windup 期纵向拉长横向收窄——「蹲伏待扑」的形体语言
 		var sq_x := 1.0
 		var sq_y := 1.0
 		if flash_t[i] > 0.075:
 			sq_x = 1.18
 			sq_y = 0.82
+		elif state[i] == 2 and tpl_pounce[tpl[i]] == 1 and lunge[i] == Vector2.ZERO:
+			sq_x = 0.82
+			sq_y = 1.22
 		var rect := Rect2(
 			pos[i] + Vector2(-24.0 * s * sq_x, -29.0 * s * sq_y),
 			Vector2(48.0 * s * sq_x, 48.0 * s * sq_y))
