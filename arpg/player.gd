@@ -61,6 +61,7 @@ var atk_timer := 0.0
 var skill_cd := 0.0
 var stun := 0.0
 var iframes := 0.0
+var slow_t := 0.0                # 冰霜词缀减速剩余秒（命中时由 mob_system 设置）
 var dash_t := 0.0
 var dash_dir := Vector2.DOWN
 var dash_hit := {}
@@ -145,6 +146,7 @@ func _physics_process(delta: float) -> void:
 	atk_timer = maxf(0.0, atk_timer - delta)
 	skill_cd = maxf(0.0, skill_cd - delta)
 	stun = maxf(0.0, stun - delta)
+	slow_t = maxf(0.0, slow_t - delta)
 	iframes = maxf(0.0, iframes - delta)
 	if in_combat_until > 0.0:
 		in_combat_until -= delta
@@ -202,7 +204,9 @@ func _physics_process(delta: float) -> void:
 	else:
 		var target := dir * spd
 		_move_vel = _move_vel.move_toward(target, (ACCEL if dir != Vector2.ZERO else FRICTION) * delta)
-		velocity = _move_vel + knock + lunge
+		# 冰霜减速：slow_t 期间移速 ×0.6（移动输入被冻僵的观感）
+		var slow_mul := 0.6 if slow_t > 0.0 else 1.0
+		velocity = _move_vel * slow_mul + knock + lunge
 		if dir != Vector2.ZERO:
 			facing = dir.normalized()
 			_update_facing_name(dir)
