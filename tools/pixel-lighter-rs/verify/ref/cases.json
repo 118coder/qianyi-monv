@@ -1,0 +1,206 @@
+{
+  "w": 72,
+  "h": 56,
+  "bg": [
+    43,
+    124,
+    167
+  ],
+  "gen": [
+    {
+      "name": "normal_object",
+      "kind": "normal"
+    },
+    {
+      "name": "normal_architecture",
+      "kind": "normal",
+      "preset": "architecture",
+      "edgeWidth": 1,
+      "facets": 20,
+      "strength": 100
+    },
+    {
+      "name": "normal_terrain",
+      "kind": "normal",
+      "preset": "terrain",
+      "edgeWidth": 3,
+      "facets": 50,
+      "strength": 110
+    },
+    {
+      "name": "normal_character",
+      "kind": "normal",
+      "preset": "character",
+      "edgeWidth": 2,
+      "facets": 15,
+      "strength": 65
+    },
+    {
+      "name": "normal_nomerge",
+      "kind": "normal",
+      "merge": false
+    },
+    {
+      "name": "normal_nofacets",
+      "kind": "normal",
+      "facets": 0
+    },
+    {
+      "name": "normal_gain150",
+      "kind": "normal",
+      "normalStrength": 150
+    },
+    {
+      "name": "normal_hidebg",
+      "kind": "normal",
+      "hide": true,
+      "edgeWidth": 2
+    },
+    {
+      "name": "mask_object",
+      "kind": "mask",
+      "strength": 100,
+      "floor": 20,
+      "ceiling": 255,
+      "cavity": 35
+    },
+    {
+      "name": "mask_soft",
+      "kind": "mask",
+      "strength": 60,
+      "floor": 45,
+      "ceiling": 220,
+      "cavity": 0,
+      "merge": false
+    },
+    {
+      "name": "bis_plain",
+      "kind": "normal",
+      "edgeWidth": 0,
+      "merge": false,
+      "facets": 0
+    },
+    {
+      "name": "bis_blur",
+      "kind": "normal",
+      "edgeWidth": 3,
+      "merge": false,
+      "facets": 0
+    },
+    {
+      "name": "bis_blur1",
+      "kind": "normal",
+      "edgeWidth": 1,
+      "merge": false,
+      "facets": 0
+    },
+    {
+      "name": "bis_merge",
+      "kind": "normal",
+      "edgeWidth": 3,
+      "merge": true,
+      "facets": 0
+    },
+    {
+      "name": "bis_facets",
+      "kind": "normal",
+      "edgeWidth": 3,
+      "merge": false,
+      "facets": 35
+    }
+  ],
+  "lit": [
+    {
+      "name": "lit_center",
+      "lx": 36,
+      "ly": 28,
+      "height": 25,
+      "falloff": 70,
+      "power": 2.5,
+      "ambient": 15,
+      "maskMix": 100,
+      "light": [
+        255,
+        255,
+        255
+      ],
+      "bg": [
+        43,
+        124,
+        167
+      ],
+      "hide": false,
+      "normal": true,
+      "mask": true
+    },
+    {
+      "name": "lit_topleft_warm",
+      "lx": 5,
+      "ly": 3,
+      "height": 120,
+      "falloff": 30,
+      "power": 6.5,
+      "ambient": 4,
+      "maskMix": 60,
+      "light": [
+        255,
+        196,
+        120
+      ],
+      "bg": [
+        43,
+        124,
+        167
+      ],
+      "hide": false,
+      "normal": true,
+      "mask": true
+    },
+    {
+      "name": "lit_nomask_blue",
+      "lx": 80,
+      "ly": 70,
+      "height": 200,
+      "falloff": 200,
+      "power": 1.2,
+      "ambient": 40,
+      "maskMix": 0,
+      "light": [
+        90,
+        140,
+        255
+      ],
+      "bg": [
+        43,
+        124,
+        167
+      ],
+      "hide": true,
+      "normal": true,
+      "mask": false
+    },
+    {
+      "name": "lit_flathide",
+      "lx": 10,
+      "ly": 50,
+      "height": 5,
+      "falloff": 10,
+      "power": 25,
+      "ambient": 0,
+      "maskMix": 100,
+      "light": [
+        255,
+        255,
+        255
+      ],
+      "bg": [
+        43,
+        124,
+        167
+      ],
+      "hide": true,
+      "normal": false,
+      "mask": false
+    }
+  ]
+}

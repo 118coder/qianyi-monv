@@ -1,0 +1,22 @@
+[package]
+name = "pixel-lighter"
+version = "1.0.0"
+edition = "2021"
+description = "像素画打光工具箱 Rust 版"
+authors = ["Pixel Lighter Rust"]
+
+[dependencies]
+eframe = { version = "0.37", default-features = false, features = [
+    "glow",
+    "default_fonts",
+] }
+egui = "0.37"
+image = { version = "0.25", default-features = false, features = ["png"] }
+rayon = "1.12"
+rfd = { version = "0.18", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true

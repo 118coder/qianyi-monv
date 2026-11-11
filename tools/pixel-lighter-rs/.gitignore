@@ -1,0 +1,5 @@
+# CLI 批量模式的输出目录与日志（可随时删）
+/out/
+pixel-lighter-cli.log
+
+# 注意：不要忽略 *.raw —— verify/ref/ 下的 .raw 是黄金测试 fixture，必须入库
